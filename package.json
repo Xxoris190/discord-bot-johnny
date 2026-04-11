@@ -1,0 +1,19 @@
+{
+  "name": "discord-bot-johnny",
+  "version": "1.0.0",
+  "description": "Bot Discord pour Johnny's server",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [],
+  "author": "Johnny",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "discord.js": "^14.26.2"
+  }
+}
