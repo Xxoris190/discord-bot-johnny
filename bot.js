@@ -1,3 +1,4 @@
+try { require('dotenv').config(); } catch (e) {} // Charge .env en local
 const {
     Client,
     GatewayIntentBits,
