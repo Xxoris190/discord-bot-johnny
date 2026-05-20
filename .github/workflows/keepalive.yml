@@ -1,0 +1,15 @@
+name: Keep Alive Render Bot
+
+on:
+  schedule:
+    # S'exécute toutes les 14 minutes (Render s'endort après 15 minutes d'inactivité)
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Permet de le lancer manuellement depuis GitHub si besoin
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render App
+        run: |
+          curl -s -I https://discord-bot-johnny.onrender.com/ | grep "HTTP/"
