@@ -30,6 +30,53 @@ const client = new Client({
 // Anti-spam pour Twitch (éviter les notifs en double)
 const currentlyStreaming = new Set();
 
+const fs = require('fs');
+const path = require('path');
+
+// Storage files
+const XP_FILE = path.join(__dirname, 'xp.json');
+const GIVEAWAYS_FILE = path.join(__dirname, 'giveaways.json');
+
+// Memory databases
+let xpDb = {};
+let giveawaysDb = {};
+
+// Load Databases
+function loadDbs() {
+    try {
+        if (fs.existsSync(XP_FILE)) {
+            xpDb = JSON.parse(fs.readFileSync(XP_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Error loading XP database:', e);
+    }
+    try {
+        if (fs.existsSync(GIVEAWAYS_FILE)) {
+            giveawaysDb = JSON.parse(fs.readFileSync(GIVEAWAYS_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Error loading Giveaways database:', e);
+    }
+}
+
+function saveXp() {
+    try {
+        fs.writeFileSync(XP_FILE, JSON.stringify(xpDb, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving XP database:', e);
+    }
+}
+
+function saveGiveaways() {
+    try {
+        fs.writeFileSync(GIVEAWAYS_FILE, JSON.stringify(giveawaysDb, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving Giveaways database:', e);
+    }
+}
+
+loadDbs();
+
 // ═══════════════════════════════════════
 // BOT PRÊT
 // ═══════════════════════════════════════
@@ -49,6 +96,13 @@ client.once('ready', () => {
 
     // Status du bot
     client.user.setActivity('le serveur 👀', { type: ActivityType.Watching });
+
+    // Reprendre les giveaways actifs
+    try {
+        resumeActiveGiveaways();
+    } catch (e) {
+        console.error('Erreur lors de la reprise des giveaways:', e.message);
+    }
 });
 
 // ═══════════════════════════════════════
@@ -386,6 +440,60 @@ client.on('interactionCreate', async (interaction) => {
             }
         }, 5000);
     }
+
+    // ──── 🎉 GIVEAWAY PARTICIPATION (button) ────
+    if (customId === 'giveaway_join') {
+        const giveawayId = interaction.message.id;
+        const gw = giveawaysDb[giveawayId];
+        const isOriginalGuild = interaction.guild.id === '1492264434003873973';
+
+        if (!gw || gw.status !== 'active') {
+            return interaction.reply({
+                content: isOriginalGuild ? '❌ Ce concours est terminé.' : '❌ This giveaway has ended.',
+                ephemeral: true
+            });
+        }
+
+        const userId = interaction.user.id;
+        const index = gw.participants.indexOf(userId);
+
+        if (index > -1) {
+            // Remove user
+            gw.participants.splice(index, 1);
+            saveGiveaways();
+
+            await interaction.reply({
+                content: isOriginalGuild ? '❌ Tu t\'es retiré du concours.' : '❌ You have left the giveaway.',
+                ephemeral: true
+            });
+        } else {
+            // Add user
+            gw.participants.push(userId);
+            saveGiveaways();
+
+            await interaction.reply({
+                content: isOriginalGuild ? '🎉 Tu participes maintenant au concours ! Bonne chance !' : '🎉 You have successfully joined the giveaway! Good luck!',
+                ephemeral: true
+            });
+        }
+
+        // Edit original message to update participant count
+        const endTimestamp = gw.endTimestamp;
+        const embed = new EmbedBuilder(interaction.message.embeds[0].data);
+        embed.setDescription(
+            isOriginalGuild
+                ? `Clique sur le bouton ci-dessous pour participer !\n\n` +
+                  `🏆 **Gagnant(s) :** ${gw.winnersCount}\n` +
+                  `⏳ **Fin :** <t:${Math.floor(endTimestamp / 1000)}:R> (<t:${Math.floor(endTimestamp / 1000)}:F>)\n` +
+                  `👥 **Participants :** ${gw.participants.length}`
+                : `Click the button below to join the giveaway!\n\n` +
+                  `🏆 **Winner(s):** ${gw.winnersCount}\n` +
+                  `⏳ **Ends:** <t:${Math.floor(endTimestamp / 1000)}:R> (<t:${Math.floor(endTimestamp / 1000)}:F>)\n` +
+                  `👥 **Participants:** ${gw.participants.length}`
+        );
+
+        await interaction.message.edit({ embeds: [embed] });
+    }
 });
 
 // ═══════════════════════════════════════
@@ -499,6 +607,400 @@ if (RENDER_URL) {
         }).on('error', () => {});
     }, 10 * 60 * 1000); // Toutes les 10 minutes
     console.log(`🔄 Auto-ping activé: ${RENDER_URL}`);
+}
+
+// ═══════════════════════════════════════
+// 🏆 XP / LEVEL & 🎉 GIVEAWAY SYSTEMS
+// ═══════════════════════════════════════
+const xpCooldowns = new Map();
+
+client.on('messageCreate', async (message) => {
+    if (message.author.bot || !message.guild) return;
+
+    const guildId = message.guild.id;
+    const userId = message.author.id;
+    const isOriginalGuild = guildId === '1492264434003873973';
+
+    // ─── XP / LEVEL SYSTEM ───
+    const chName = message.channel.name.toLowerCase();
+    const isAllowedXpChannel = !chName.includes('rules') && 
+                               !chName.includes('verify') && 
+                               !chName.includes('ticket') && 
+                               !chName.includes('roles') && 
+                               !chName.includes('announces') && 
+                               !chName.includes('announcements') &&
+                               !chName.includes('bienvenue') &&
+                               !chName.includes('welcome') &&
+                               !chName.includes('staff-bot-logs');
+
+    if (isAllowedXpChannel) {
+        const now = Date.now();
+        const userCooldown = xpCooldowns.get(userId) || 0;
+        if (now - userCooldown >= 60000) { // 1 minute cooldown
+            xpCooldowns.set(userId, now);
+
+            if (!xpDb[guildId]) xpDb[guildId] = {};
+            if (!xpDb[guildId][userId]) xpDb[guildId][userId] = { xp: 0, level: 0 };
+
+            const xpToGained = Math.floor(Math.random() * 11) + 15; // 15-25 XP
+            xpDb[guildId][userId].xp += xpToGained;
+
+            const currentXp = xpDb[guildId][userId].xp;
+            const currentLevel = xpDb[guildId][userId].level;
+
+            const nextLevelXpNeeded = (currentLevel + 1) * 150;
+            if (currentXp >= nextLevelXpNeeded) {
+                xpDb[guildId][userId].level += 1;
+                const newLevel = xpDb[guildId][userId].level;
+
+                saveXp();
+
+                const levelUpChannel = message.guild.channels.cache.find(
+                    c => (c.name.includes('level-ups') || c.name.includes('general') || c.name.includes('général')) && c.type === ChannelType.GuildText
+                );
+
+                const mentionText = `${message.author}`;
+                const congratMsg = isOriginalGuild 
+                    ? `🎉 Félicitations ${mentionText} ! Tu viens de monter au **Niveau ${newLevel}** ! 🚀`
+                    : `🎉 Congratulations ${mentionText}! You just leveled up to **Level ${newLevel}**! 🚀`;
+
+                if (levelUpChannel) {
+                    try {
+                        await levelUpChannel.send(congratMsg);
+                    } catch (e) {
+                        console.error('Error sending level up message:', e.message);
+                    }
+                } else {
+                    try {
+                        await message.channel.send(congratMsg);
+                    } catch (e) {}
+                }
+
+                // Auto roles assignment
+                try {
+                    if (!isOriginalGuild) {
+                        const levelRolesMapping = [
+                            { level: 5, name: '🎵 Vocaloid (Lvl 5)' },
+                            { level: 10, name: '🌟 Rising Star (Lvl 10)' },
+                            { level: 20, name: '👑 Ado Fanatic (Lvl 20)' },
+                            { level: 30, name: '🔥 UTD Legend (Lvl 30)' }
+                        ];
+
+                        const roleToAssign = levelRolesMapping.find(r => r.level === newLevel);
+                        if (roleToAssign) {
+                            const role = message.guild.roles.cache.find(r => r.name.includes(roleToAssign.name));
+                            if (role) {
+                                await message.member.roles.add(role);
+                                const roleMsg = `🏆 You unlocked the role **${role.name}**!`;
+                                if (levelUpChannel) {
+                                    await levelUpChannel.send(`${message.author} ${roleMsg}`);
+                                } else {
+                                    await message.channel.send(`${message.author} ${roleMsg}`);
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error assigning level up role:', err.message);
+                }
+            } else {
+                saveXp();
+            }
+        }
+    }
+
+    // ─── COMMANDS ───
+    if (!message.content.startsWith('!')) return;
+
+    const args = message.content.slice(1).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
+
+    // 1. RANK COMMAND
+    if (command === 'rank' || command === 'level') {
+        if (!xpDb[guildId] || !xpDb[guildId][userId]) {
+            xpDb[guildId] = xpDb[guildId] || {};
+            xpDb[guildId][userId] = { xp: 0, level: 0 };
+        }
+
+        const data = xpDb[guildId][userId];
+        const nextLevelXp = (data.level + 1) * 150;
+        const progress = Math.min(100, Math.floor((data.xp / nextLevelXp) * 100));
+
+        const embed = new EmbedBuilder()
+            .setColor(isOriginalGuild ? '#3498DB' : '#00E5FF')
+            .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+            .setTitle(isOriginalGuild ? '🏆 Ton Niveau / Rank' : '🏆 Your Level / Rank')
+            .addFields(
+                { name: isOriginalGuild ? 'Niveau' : 'Level', value: `✨ **${data.level}**`, inline: true },
+                { name: 'XP', value: `📊 **${data.xp} / ${nextLevelXp}**`, inline: true },
+                { name: isOriginalGuild ? 'Progression' : 'Progress', value: `\`[${'■'.repeat(Math.floor(progress / 10))}${'░'.repeat(10 - Math.floor(progress / 10))}]\` **${progress}%**` }
+            )
+            .setTimestamp();
+
+        return message.reply({ embeds: [embed] });
+    }
+
+    // 2. LEADERBOARD COMMAND
+    if (command === 'leaderboard' || command === 'lb') {
+        if (!xpDb[guildId] || Object.keys(xpDb[guildId]).length === 0) {
+            return message.reply(isOriginalGuild ? '❌ Aucun membre enregistré pour le moment.' : '❌ No members recorded yet.');
+        }
+
+        const sorted = Object.entries(xpDb[guildId])
+            .map(([uid, udata]) => ({ uid, ...udata }))
+            .sort((a, b) => b.level - a.level || b.xp - a.xp)
+            .slice(0, 10);
+
+        const leaderboardList = [];
+        for (let i = 0; i < sorted.length; i++) {
+            const entry = sorted[i];
+            let userTag = `<@${entry.uid}>`;
+            try {
+                const member = await message.guild.members.fetch(entry.uid);
+                userTag = `**${member.user.username}**`;
+            } catch (e) {}
+
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
+            leaderboardList.push(`${medal} | ${userTag} - Lvl **${entry.level}** (${entry.xp} XP)`);
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(isOriginalGuild ? '#E67E22' : '#F1C40F')
+            .setTitle(isOriginalGuild ? '🏆 Classement du Serveur' : '🏆 Server Leaderboard')
+            .setDescription(leaderboardList.join('\n') || 'No members listed.')
+            .setTimestamp();
+
+        return message.reply({ embeds: [embed] });
+    }
+
+    // 3. GIVEAWAY COMMAND
+    if (command === 'giveaway') {
+        const isStaff = message.member.permissions.has(PermissionFlagsBits.Administrator) ||
+                        message.member.roles.cache.some(r => r.name.includes('King') || r.name.includes('Admin') || r.name.includes('Modo') || r.name.includes('Empress') || r.name.includes('Commander'));
+
+        if (!isStaff) {
+            return message.reply({
+                content: isOriginalGuild ? '❌ Tu n\'as pas la permission de lancer un giveaway.' : '❌ You don\'t have permission to start a giveaway.',
+            });
+        }
+
+        if (args.length < 3) {
+            return message.reply({
+                content: isOriginalGuild 
+                    ? '💡 Usage: `!giveaway <duration> <winners> <prize>`\nExemple: `!giveaway 1h 1 Mythic Goku` (durées supportées: s, m, h, d)'
+                    : '💡 Usage: `!giveaway <duration> <winners> <prize>`\nExample: `!giveaway 1h 1 Mythic Goku` (durations: s, m, h, d)'
+            });
+        }
+
+        const durationStr = args[0];
+        const winnersCount = parseInt(args[1], 10);
+        const prize = args.slice(2).join(' ');
+
+        if (isNaN(winnersCount) || winnersCount <= 0) {
+            return message.reply(isOriginalGuild ? '❌ Nombre de gagnants invalide.' : '❌ Invalid number of winners.');
+        }
+
+        const ms = parseDuration(durationStr);
+        if (!ms || ms < 5000) {
+            return message.reply(isOriginalGuild ? '❌ Durée invalide (minimum 5s).' : '❌ Invalid duration (minimum 5s).');
+        }
+
+        const giveawayChannel = message.guild.channels.cache.find(
+            c => (c.name.includes('giveaway') || c.name.includes('concours')) && c.type === ChannelType.GuildText
+        ) || message.channel;
+
+        const endTimestamp = Date.now() + ms;
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`giveaway_join`)
+                .setLabel(isOriginalGuild ? '🎉 Participer' : '🎉 Join')
+                .setStyle(ButtonStyle.Primary)
+        );
+
+        const embed = new EmbedBuilder()
+            .setColor('#9B59B6')
+            .setTitle(`🎉 GIVEAWAY: ${prize} 🎉`)
+            .setDescription(
+                isOriginalGuild
+                    ? `Clique sur le bouton ci-dessous pour participer !\n\n` +
+                      `🏆 **Gagnant(s) :** ${winnersCount}\n` +
+                      `⏳ **Fin :** <t:${Math.floor(endTimestamp / 1000)}:R> (<t:${Math.floor(endTimestamp / 1000)}:F>)\n` +
+                      `👥 **Participants :** 0`
+                    : `Click the button below to join the giveaway!\n\n` +
+                      `🏆 **Winner(s):** ${winnersCount}\n` +
+                      `⏳ **Ends:** <t:${Math.floor(endTimestamp / 1000)}:R> (<t:${Math.floor(endTimestamp / 1000)}:F>)\n` +
+                      `👥 **Participants:** 0`
+            )
+            .setFooter({ text: isOriginalGuild ? 'Bonne chance !' : 'Good luck!' })
+            .setTimestamp();
+
+        try {
+            const giveawayMsg = await giveawayChannel.send({ embeds: [embed], components: [row] });
+            
+            try { await message.delete(); } catch (e) {}
+
+            const giveawayId = giveawayMsg.id;
+            giveawaysDb[giveawayId] = {
+                guildId,
+                channelId: giveawayChannel.id,
+                messageId: giveawayId,
+                prize,
+                winnersCount,
+                endTimestamp,
+                participants: [],
+                status: 'active'
+            };
+            saveGiveaways();
+
+            startGiveawayTimer(giveawayId, ms);
+        } catch (err) {
+            console.error('Error starting giveaway:', err.message);
+            message.reply('❌ Error starting giveaway.');
+        }
+    }
+
+    // 4. REROLL GIVEAWAY COMMAND
+    if (command === 'groll' || command === 'reroll') {
+        const isStaff = message.member.permissions.has(PermissionFlagsBits.Administrator) ||
+                        message.member.roles.cache.some(r => r.name.includes('King') || r.name.includes('Admin') || r.name.includes('Modo') || r.name.includes('Empress') || r.name.includes('Commander'));
+
+        if (!isStaff) {
+            return message.reply(isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.');
+        }
+
+        const msgId = args[0];
+        if (!msgId) return message.reply(isOriginalGuild ? '💡 Usage: `!reroll <messageId>`' : '💡 Usage: `!reroll <messageId>`');
+
+        const gw = giveawaysDb[msgId];
+        if (!gw) return message.reply(isOriginalGuild ? '❌ Concours introuvable.' : '❌ Giveaway not found.');
+
+        await message.reply(isOriginalGuild ? '🔄 Tirage d\'un nouveau gagnant...' : '🔄 Drawing a new winner...');
+        await endGiveaway(msgId, true);
+    }
+});
+
+// Helper Functions
+function parseDuration(str) {
+    const match = str.match(/^(\d+)([smdh])$/);
+    if (!match) return null;
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+    switch (unit) {
+        case 's': return value * 1000;
+        case 'm': return value * 60 * 1000;
+        case 'h': return value * 60 * 60 * 1000;
+        case 'd': return value * 24 * 60 * 60 * 1000;
+        default: return null;
+    }
+}
+
+function startGiveawayTimer(giveawayId, ms) {
+    setTimeout(async () => {
+        await endGiveaway(giveawayId);
+    }, ms);
+}
+
+async function endGiveaway(giveawayId, reroll = false) {
+    const gw = giveawaysDb[giveawayId];
+    if (!gw || (gw.status !== 'active' && !reroll)) return;
+
+    try {
+        const guild = client.guilds.cache.get(gw.guildId);
+        if (!guild) return;
+
+        const channel = guild.channels.cache.get(gw.channelId);
+        if (!channel) return;
+
+        let msg;
+        try {
+            msg = await channel.messages.fetch(gw.messageId);
+        } catch (e) {
+            console.log(`Giveaway message not found: ${gw.messageId}`);
+            gw.status = 'deleted';
+            saveGiveaways();
+            return;
+        }
+
+        const isOriginalGuild = gw.guildId === '1492264434003873973';
+        const participants = gw.participants || [];
+
+        if (participants.length === 0) {
+            gw.status = 'ended';
+            saveGiveaways();
+
+            const noParticipantsEmbed = new EmbedBuilder()
+                .setColor('#E74C3C')
+                .setTitle(`🎉 GIVEAWAY ENDED: ${gw.prize} 🎉`)
+                .setDescription(
+                    isOriginalGuild
+                        ? `❌ Aucun participant n'a rejoint le concours.`
+                        : `❌ No participants joined the giveaway.`
+                )
+                .setTimestamp();
+
+            await msg.edit({ embeds: [noParticipantsEmbed], components: [] });
+            return;
+        }
+
+        const winners = [];
+        const pool = [...participants];
+        const winnersCount = Math.min(gw.winnersCount, pool.length);
+
+        for (let i = 0; i < winnersCount; i++) {
+            const randIndex = Math.floor(Math.random() * pool.length);
+            winners.push(pool.splice(randIndex, 1)[0]);
+        }
+
+        gw.status = 'ended';
+        gw.winners = winners;
+        saveGiveaways();
+
+        const winnerMentions = winners.map(wid => `<@${wid}>`).join(', ');
+
+        const endedEmbed = new EmbedBuilder()
+            .setColor('#2ECC71')
+            .setTitle(`🎉 GIVEAWAY ENDED: ${gw.prize} 🎉`)
+            .setDescription(
+                isOriginalGuild
+                    ? `🏆 **Gagnant(s) :** ${winnerMentions}\n` +
+                      `👥 **Participants :** ${participants.length}`
+                    : `🏆 **Winner(s):** ${winnerMentions}\n` +
+                      `👥 **Participants:** ${participants.length}`
+            )
+            .setFooter({ text: isOriginalGuild ? 'Félicitations !' : 'Congratulations!' })
+            .setTimestamp();
+
+        await msg.edit({ embeds: [endedEmbed], components: [] });
+
+        await channel.send({
+            content: isOriginalGuild
+                ? `🎉 Félicitations ${winnerMentions} ! Tu gagnes **${gw.prize}** ! 🎁`
+                : `🎉 Congratulations ${winnerMentions}! You won **${gw.prize}**! 🎁`
+        });
+    } catch (err) {
+        console.error('Error ending giveaway:', err.message);
+    }
+}
+
+function resumeActiveGiveaways() {
+    console.log('🔄 Checking active giveaways to resume...');
+    let resumed = 0;
+    const now = Date.now();
+    for (const [gid, gw] of Object.entries(giveawaysDb)) {
+        if (gw.status === 'active') {
+            const timeLeft = gw.endTimestamp - now;
+            if (timeLeft <= 0) {
+                console.log(`   ⏳ Active giveaway ${gid} expired during downtime, ending now.`);
+                endGiveaway(gid);
+            } else {
+                console.log(`   ⏳ Active giveaway ${gid} resuming, ends in ${Math.round(timeLeft / 1000)}s.`);
+                startGiveawayTimer(gid, timeLeft);
+            }
+            resumed++;
+        }
+    }
+    console.log(`✅ Giveaways resume check complete. Resumed: ${resumed}`);
 }
 
 // ═══════════════════════════════════════
