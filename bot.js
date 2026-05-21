@@ -464,6 +464,9 @@ const SELF_ROLE_MAP = {
     'toggle_utd_ping':  '🔔 UTD Ping',
     'toggle_ado_ping':  '🔔 Ado Ping',
     'toggle_gamer':     '🎮 Gamer',
+    'toggle_story_ping': '🔔 Story & Legend',
+    'toggle_raids_ping': '🔔 Raids',
+    'toggle_vr_ping':    '🔔 Virtual Realm',
 };
 
 function getModLogChannel(guild) {
