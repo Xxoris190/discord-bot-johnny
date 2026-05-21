@@ -467,6 +467,20 @@ client.on('interactionCreate', async (interaction) => {
                 ephemeral: true
             });
         } else {
+            // Check level requirement
+            const requiredLevel = gw.requiredLevel || 0;
+            if (requiredLevel > 0) {
+                const userXpData = xpDb[interaction.guild.id]?.[userId] || { level: 0 };
+                if (userXpData.level < requiredLevel) {
+                    return interaction.reply({
+                        content: isOriginalGuild
+                            ? `❌ Tu dois être au moins **Niveau ${requiredLevel}** pour participer ! (Ton niveau actuel : ${userXpData.level})`
+                            : `❌ You must be at least **Level ${requiredLevel}** to join this giveaway! (Your current level: ${userXpData.level})`,
+                        ephemeral: true
+                    });
+                }
+            }
+
             // Add user
             gw.participants.push(userId);
             saveGiveaways();
@@ -479,14 +493,17 @@ client.on('interactionCreate', async (interaction) => {
 
         // Edit original message to update participant count
         const endTimestamp = gw.endTimestamp;
+        const reqLvl = gw.requiredLevel || 0;
         const embed = new EmbedBuilder(interaction.message.embeds[0].data);
         embed.setDescription(
             isOriginalGuild
                 ? `Clique sur le bouton ci-dessous pour participer !\n\n` +
+                  (reqLvl > 0 ? `🔒 **Niveau Requis :** ${reqLvl}\n` : '') +
                   `🏆 **Gagnant(s) :** ${gw.winnersCount}\n` +
                   `⏳ **Fin :** <t:${Math.floor(endTimestamp / 1000)}:R> (<t:${Math.floor(endTimestamp / 1000)}:F>)\n` +
                   `👥 **Participants :** ${gw.participants.length}`
                 : `Click the button below to join the giveaway!\n\n` +
+                  (reqLvl > 0 ? `🔒 **Required Level:** ${reqLvl}\n` : '') +
                   `🏆 **Winner(s):** ${gw.winnersCount}\n` +
                   `⏳ **Ends:** <t:${Math.floor(endTimestamp / 1000)}:R> (<t:${Math.floor(endTimestamp / 1000)}:F>)\n` +
                   `👥 **Participants:** ${gw.participants.length}`
@@ -794,7 +811,7 @@ client.on('messageCreate', async (message) => {
 
         const durationStr = args[0];
         const winnersCount = parseInt(args[1], 10);
-        const prize = args.slice(2).join(' ');
+        let prize = args.slice(2).join(' ');
 
         if (isNaN(winnersCount) || winnersCount <= 0) {
             return message.reply(isOriginalGuild ? '❌ Nombre de gagnants invalide.' : '❌ Invalid number of winners.');
@@ -803,6 +820,18 @@ client.on('messageCreate', async (message) => {
         const ms = parseDuration(durationStr);
         if (!ms || ms < 5000) {
             return message.reply(isOriginalGuild ? '❌ Durée invalide (minimum 5s).' : '❌ Invalid duration (minimum 5s).');
+        }
+
+        // Parse optional level requirement (e.g., lvl:5 or level:5)
+        let requiredLevel = 0;
+        const lvlMatch = prize.match(/(?:lvl|level)\s*:\s*(\d+)/i);
+        if (lvlMatch) {
+            requiredLevel = parseInt(lvlMatch[1], 10);
+            prize = prize.replace(/(?:lvl|level)\s*:\s*(\d+)/i, '').trim();
+            prize = prize.replace(/\s+/g, ' ');
+        }
+        if (!prize) {
+            prize = isOriginalGuild ? 'Concours' : 'Giveaway';
         }
 
         const giveawayChannel = message.guild.channels.cache.find(
@@ -824,10 +853,12 @@ client.on('messageCreate', async (message) => {
             .setDescription(
                 isOriginalGuild
                     ? `Clique sur le bouton ci-dessous pour participer !\n\n` +
+                      (requiredLevel > 0 ? `🔒 **Niveau Requis :** ${requiredLevel}\n` : '') +
                       `🏆 **Gagnant(s) :** ${winnersCount}\n` +
                       `⏳ **Fin :** <t:${Math.floor(endTimestamp / 1000)}:R> (<t:${Math.floor(endTimestamp / 1000)}:F>)\n` +
                       `👥 **Participants :** 0`
                     : `Click the button below to join the giveaway!\n\n` +
+                      (requiredLevel > 0 ? `🔒 **Required Level:** ${requiredLevel}\n` : '') +
                       `🏆 **Winner(s):** ${winnersCount}\n` +
                       `⏳ **Ends:** <t:${Math.floor(endTimestamp / 1000)}:R> (<t:${Math.floor(endTimestamp / 1000)}:F>)\n` +
                       `👥 **Participants:** 0`
@@ -849,7 +880,8 @@ client.on('messageCreate', async (message) => {
                 winnersCount,
                 endTimestamp,
                 participants: [],
-                status: 'active'
+                status: 'active',
+                requiredLevel
             };
             saveGiveaways();
 
