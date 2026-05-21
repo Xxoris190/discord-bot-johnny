@@ -38,10 +38,12 @@ const path = require('path');
 // Storage files
 const XP_FILE = path.join(__dirname, 'xp.json');
 const GIVEAWAYS_FILE = path.join(__dirname, 'giveaways.json');
+const WARNINGS_FILE = path.join(__dirname, 'warnings.json');
 
 // Memory databases
 let xpDb = {};
 let giveawaysDb = {};
+let warningsDb = {};
 
 // Load Databases
 function loadDbs() {
@@ -59,6 +61,13 @@ function loadDbs() {
     } catch (e) {
         console.error('Error loading Giveaways database:', e);
     }
+    try {
+        if (fs.existsSync(WARNINGS_FILE)) {
+            warningsDb = JSON.parse(fs.readFileSync(WARNINGS_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Error loading Warnings database:', e);
+    }
 }
 
 function saveXp() {
@@ -74,6 +83,14 @@ function saveGiveaways() {
         fs.writeFileSync(GIVEAWAYS_FILE, JSON.stringify(giveawaysDb, null, 2), 'utf8');
     } catch (e) {
         console.error('Error saving Giveaways database:', e);
+    }
+}
+
+function saveWarnings() {
+    try {
+        fs.writeFileSync(WARNINGS_FILE, JSON.stringify(warningsDb, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Error saving Warnings database:', e);
     }
 }
 
@@ -169,6 +186,171 @@ async function registerSlashCommands() {
                         type: 3, // STRING
                         description: 'ID du message du giveaway / The giveaway message ID',
                         required: true
+                    }
+                ]
+            },
+            {
+                name: 'ban',
+                description: 'Bannit un membre du serveur / Bans a member from the server',
+                default_member_permissions: PermissionFlagsBits.BanMembers.toString(),
+                options: [
+                    {
+                        name: 'user',
+                        type: 6, // USER type
+                        description: 'Le membre à bannir / The member to ban',
+                        required: true
+                    },
+                    {
+                        name: 'reason',
+                        type: 3, // STRING type
+                        description: 'Raison du bannissement / Reason for the ban',
+                        required: false
+                    }
+                ]
+            },
+            {
+                name: 'kick',
+                description: 'Exclut un membre du serveur / Kicks a member from the server',
+                default_member_permissions: PermissionFlagsBits.KickMembers.toString(),
+                options: [
+                    {
+                        name: 'user',
+                        type: 6, // USER type
+                        description: 'Le membre à exclure / The member to kick',
+                        required: true
+                    },
+                    {
+                        name: 'reason',
+                        type: 3, // STRING type
+                        description: 'Raison de l\'exclusion / Reason for the kick',
+                        required: false
+                    }
+                ]
+            },
+            {
+                name: 'mute',
+                description: 'Met en sourdine un membre (timeout natif) / Mutes a member (native timeout)',
+                default_member_permissions: PermissionFlagsBits.ModerateMembers.toString(),
+                options: [
+                    {
+                        name: 'user',
+                        type: 6, // USER type
+                        description: 'Le membre à rendre muet / The member to mute',
+                        required: true
+                    },
+                    {
+                        name: 'duration',
+                        type: 3, // STRING type
+                        description: 'Durée (ex: 10m, 1h, 1d) / Duration (e.g. 10m, 1h, 1d)',
+                        required: true
+                    },
+                    {
+                        name: 'reason',
+                        type: 3, // STRING type
+                        description: 'Raison de la sourdine / Reason for the mute',
+                        required: false
+                    }
+                ]
+            },
+            {
+                name: 'unmute',
+                description: 'Retire la sourdine d\'un membre / Unmutes a member',
+                default_member_permissions: PermissionFlagsBits.ModerateMembers.toString(),
+                options: [
+                    {
+                        name: 'user',
+                        type: 6, // USER type
+                        description: 'Le membre à démute / The member to unmute',
+                        required: true
+                    },
+                    {
+                        name: 'reason',
+                        type: 3, // STRING type
+                        description: 'Raison du démute / Reason for the unmute',
+                        required: false
+                    }
+                ]
+            },
+            {
+                name: 'warn',
+                description: 'Donne un avertissement à un membre / Warns a member',
+                default_member_permissions: PermissionFlagsBits.ModerateMembers.toString(),
+                options: [
+                    {
+                        name: 'user',
+                        type: 6, // USER type
+                        description: 'Le membre à avertir / The member to warn',
+                        required: true
+                    },
+                    {
+                        name: 'reason',
+                        type: 3, // STRING type
+                        description: 'Raison de l\'avertissement / Reason for the warning',
+                        required: true
+                    }
+                ]
+            },
+            {
+                name: 'warnings',
+                description: 'Affiche les avertissements d\'un membre / Shows warnings of a member',
+                default_member_permissions: PermissionFlagsBits.ModerateMembers.toString(),
+                options: [
+                    {
+                        name: 'user',
+                        type: 6, // USER type
+                        description: 'Le membre à vérifier / The member to check',
+                        required: true
+                    }
+                ]
+            },
+            {
+                name: 'clearwarns',
+                description: 'Efface les avertissements d\'un membre / Clears warnings of a member',
+                default_member_permissions: PermissionFlagsBits.ModerateMembers.toString(),
+                options: [
+                    {
+                        name: 'user',
+                        type: 6, // USER type
+                        description: 'Le membre à nettoyer / The member to clear',
+                        required: true
+                    }
+                ]
+            },
+            {
+                name: 'lock',
+                description: 'Verrouille un salon textuel / Locks a text channel',
+                default_member_permissions: PermissionFlagsBits.ManageChannels.toString(),
+                options: [
+                    {
+                        name: 'channel',
+                        type: 7, // CHANNEL type
+                        description: 'Le salon à verrouiller (par défaut, celui-ci) / Channel to lock (default: current)',
+                        required: false
+                    },
+                    {
+                        name: 'reason',
+                        type: 3, // STRING type
+                        description: 'Raison du verrouillage / Reason for the lock',
+                        required: false
+                    }
+                ]
+            },
+            {
+                name: 'unlock',
+                description: 'Déverrouille un salon textuel / Unlocks a text channel',
+                default_member_permissions: PermissionFlagsBits.ManageChannels.toString(),
+                options: [
+                    {
+                        name: 'channel',
+                        type: 7, // CHANNEL type
+                        description: 'Le salon à déverrouiller (par défaut, celui-ci) / Channel to unlock (default: current)',
+                        required: false
+                    },
+                    {
+                        name: 'reason',
+                        type: 3, // STRING type
+                        description: 'Raison du déverrouillage / Reason for the unlock',
+                        required: false
                     }
                 ]
             }
@@ -283,6 +465,50 @@ const SELF_ROLE_MAP = {
     'toggle_ado_ping':  '🔔 Ado Ping',
     'toggle_gamer':     '🎮 Gamer',
 };
+
+function getModLogChannel(guild) {
+    let ch = guild.channels.cache.find(
+        c => (c.name === '📋-logs' || c.name === '⚙️-staff-bot-logs' || c.name === 'mod-logs' || c.name === 'moderation-logs') && c.type === ChannelType.GuildText
+    );
+    if (ch) return ch;
+
+    ch = guild.channels.cache.find(
+        c => (c.name.includes('staff-bot-logs') || c.name.includes('mod-log')) && c.type === ChannelType.GuildText
+    );
+    if (ch) return ch;
+
+    ch = guild.channels.cache.find(
+        c => c.name.includes('logs') && !c.name.includes('ticket') && c.type === ChannelType.GuildText
+    );
+    return ch || null;
+}
+
+async function sendModLog(guild, actionName, targetUser, moderator, reason, extraFields = [], color = '#3498DB') {
+    const logChannel = getModLogChannel(guild);
+    if (!logChannel) return console.log(`   ⚠️ Salon de mod-logs non trouvé sur le serveur ${guild.name}`);
+
+    const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle(`🛡️ Action de Modération : ${actionName}`)
+        .setDescription(`Une action de modération a été effectuée.`)
+        .addFields(
+            { name: '👤 Cible / Target', value: `${targetUser} (${targetUser.tag || targetUser.username})\nID: \`${targetUser.id}\``, inline: true },
+            { name: '🛡️ Modérateur / Moderator', value: `${moderator} (${moderator.tag || moderator.username})\nID: \`${moderator.id}\``, inline: true },
+            { name: '📝 Raison / Reason', value: reason || 'Aucune raison fournie / No reason provided' }
+        )
+        .setTimestamp();
+
+    if (extraFields && extraFields.length > 0) {
+        embed.addFields(extraFields);
+    }
+
+    try {
+        await logChannel.send({ embeds: [embed] });
+        console.log(`   ✅ Log de modération envoyé dans #${logChannel.name}`);
+    } catch (err) {
+        console.error(`   ❌ Impossible d'envoyer le log de modération:`, err.message);
+    }
+}
 
 // ═══════════════════════════════════════
 // 🎫 ✅ 🎭 GESTION DES BOUTONS (INTERACTIONS)
@@ -479,6 +705,508 @@ client.on('interactionCreate', async (interaction) => {
 
             await interaction.reply(isOriginalGuild ? '🔄 Tirage d\'un nouveau gagnant...' : '🔄 Drawing a new winner...');
             await endGiveaway(msgId, true);
+            return;
+        }
+
+        // 5. BAN COMMAND
+        if (commandName === 'ban') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const targetUser = interaction.options.getUser('user');
+            const reason = interaction.options.getString('reason') || 'Aucune raison fournie / No reason provided';
+
+            const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            if (member) {
+                if (!member.bannable) {
+                    return interaction.reply({
+                        content: isOriginalGuild ? '❌ Impossible de bannir cet utilisateur (permissions du bot insuffisantes ou rôle trop élevé).' : '❌ Cannot ban this user (insufficient bot permissions or role too high).',
+                        ephemeral: true
+                    });
+                }
+            }
+
+            try {
+                await interaction.guild.members.ban(targetUser.id, { reason });
+                
+                await interaction.reply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor('#E74C3C')
+                            .setTitle(isOriginalGuild ? '🔨 Membre banni' : '🔨 Member banned')
+                            .setDescription(isOriginalGuild 
+                                ? `**${targetUser.username}** a été banni.\n**Raison :** ${reason}`
+                                : `**${targetUser.username}** has been banned.\n**Reason:** ${reason}`
+                            )
+                            .setTimestamp()
+                    ]
+                });
+
+                await sendModLog(interaction.guild, 'BAN', targetUser, interaction.user, reason, [], '#E74C3C');
+            } catch (err) {
+                console.error(err);
+                return interaction.reply({
+                    content: `❌ Erreur : ${err.message}`,
+                    ephemeral: true
+                });
+            }
+            return;
+        }
+
+        // 6. KICK COMMAND
+        if (commandName === 'kick') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const targetUser = interaction.options.getUser('user');
+            const reason = interaction.options.getString('reason') || 'Aucune raison fournie / No reason provided';
+
+            const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            if (!member) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Cet utilisateur n\'est pas sur le serveur.' : '❌ This user is not on the server.',
+                    ephemeral: true
+                });
+            }
+
+            if (!member.kickable) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Impossible d\'exclure cet utilisateur.' : '❌ Cannot kick this user.',
+                    ephemeral: true
+                });
+            }
+
+            try {
+                await member.kick(reason);
+                
+                await interaction.reply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor('#E74C3C')
+                            .setTitle(isOriginalGuild ? '🚪 Membre exclu' : '🚪 Member kicked')
+                            .setDescription(isOriginalGuild 
+                                ? `**${targetUser.username}** a été exclu du serveur.\n**Raison :** ${reason}`
+                                : `**${targetUser.username}** has been kicked from the server.\n**Reason:** ${reason}`
+                            )
+                            .setTimestamp()
+                    ]
+                });
+
+                await sendModLog(interaction.guild, 'KICK', targetUser, interaction.user, reason, [], '#E74C3C');
+            } catch (err) {
+                console.error(err);
+                return interaction.reply({
+                    content: `❌ Erreur : ${err.message}`,
+                    ephemeral: true
+                });
+            }
+            return;
+        }
+
+        // 7. MUTE COMMAND
+        if (commandName === 'mute') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const targetUser = interaction.options.getUser('user');
+            const durationStr = interaction.options.getString('duration');
+            const reason = interaction.options.getString('reason') || 'Aucune raison fournie / No reason provided';
+
+            const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            if (!member) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Cet utilisateur n\'est pas sur le serveur.' : '❌ This user is not on the server.',
+                    ephemeral: true
+                });
+            }
+
+            const ms = parseDuration(durationStr);
+            if (!ms) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Durée invalide (ex: 10m, 1h, 1d).' : '❌ Invalid duration (e.g. 10m, 1h, 1d).',
+                    ephemeral: true
+                });
+            }
+
+            if (!member.moderatable) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Impossible de modérer cet utilisateur (permissions du bot insuffisantes).' : '❌ Cannot moderate this user (insufficient bot permissions).',
+                    ephemeral: true
+                });
+            }
+
+            try {
+                await member.timeout(ms, reason);
+
+                await interaction.reply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor('#E67E22')
+                            .setTitle(isOriginalGuild ? '🔇 Membre mis en sourdine' : '🔇 Member muted (timeout)')
+                            .setDescription(isOriginalGuild 
+                                ? `**${targetUser.username}** a été mis en sourdine pour **${durationStr}**.\n**Raison :** ${reason}`
+                                : `**${targetUser.username}** has been muted for **${durationStr}**.\n**Reason:** ${reason}`
+                            )
+                            .setTimestamp()
+                    ]
+                });
+
+                await sendModLog(interaction.guild, 'MUTE (TIMEOUT)', targetUser, interaction.user, reason, [
+                    { name: '⏳ Durée / Duration', value: durationStr, inline: true }
+                ], '#E67E22');
+            } catch (err) {
+                console.error(err);
+                return interaction.reply({
+                    content: `❌ Erreur : ${err.message}`,
+                    ephemeral: true
+                });
+            }
+            return;
+        }
+
+        // 8. UNMUTE COMMAND
+        if (commandName === 'unmute') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const targetUser = interaction.options.getUser('user');
+            const reason = interaction.options.getString('reason') || 'Aucune raison fournie / No reason provided';
+
+            const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            if (!member) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Cet utilisateur n\'est pas sur le serveur.' : '❌ This user is not on the server.',
+                    ephemeral: true
+                });
+            }
+
+            if (!member.communicationDisabledUntilTimestamp || member.communicationDisabledUntilTimestamp < Date.now()) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Cet utilisateur n\'est pas en sourdine.' : '❌ This user is not muted.',
+                    ephemeral: true
+                });
+            }
+
+            try {
+                await member.timeout(null, reason);
+
+                await interaction.reply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor('#2ECC71')
+                            .setTitle(isOriginalGuild ? '🔊 Sourdine retirée' : '🔊 Mute removed (untimeout)')
+                            .setDescription(isOriginalGuild 
+                                ? `La sourdine de **${targetUser.username}** a été retirée.\n**Raison :** ${reason}`
+                                : `Mute removed for **${targetUser.username}**.\n**Reason:** ${reason}`
+                            )
+                            .setTimestamp()
+                    ]
+                });
+
+                await sendModLog(interaction.guild, 'UNMUTE (UNTIMEOUT)', targetUser, interaction.user, reason, [], '#2ECC71');
+            } catch (err) {
+                console.error(err);
+                return interaction.reply({
+                    content: `❌ Erreur : ${err.message}`,
+                    ephemeral: true
+                });
+            }
+            return;
+        }
+
+        // 9. WARN COMMAND
+        if (commandName === 'warn') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const targetUser = interaction.options.getUser('user');
+            const reason = interaction.options.getString('reason');
+
+            if (targetUser.bot) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Tu ne peux pas avertir un bot.' : '❌ You cannot warn a bot.',
+                    ephemeral: true
+                });
+            }
+
+            if (!warningsDb[guildId]) warningsDb[guildId] = {};
+            if (!warningsDb[guildId][targetUser.id]) warningsDb[guildId][targetUser.id] = [];
+
+            const warnObj = {
+                reason,
+                warnerId: userId,
+                timestamp: Date.now()
+            };
+
+            warningsDb[guildId][targetUser.id].push(warnObj);
+            saveWarnings();
+
+            const totalWarns = warningsDb[guildId][targetUser.id].length;
+
+            // Essayer d'envoyer un MP
+            try {
+                const dmEmbed = new EmbedBuilder()
+                    .setColor('#F1C40F')
+                    .setTitle(isOriginalGuild ? `⚠️ Avertissement reçu sur ${interaction.guild.name}` : `⚠️ Warning received on ${interaction.guild.name}`)
+                    .setDescription(isOriginalGuild 
+                        ? `Tu as reçu un avertissement.\n**Raison :** ${reason}\n\nNombre total d'avertissements : **${totalWarns}**`
+                        : `You have received a warning.\n**Reason:** ${reason}\n\nTotal warnings count: **${totalWarns}**`
+                    )
+                    .setTimestamp();
+                await targetUser.send({ embeds: [dmEmbed] });
+            } catch (e) {
+                console.log(`   ⚠️ Impossible d'envoyer un MP à ${targetUser.username}`);
+            }
+
+            await interaction.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor('#F1C40F')
+                        .setTitle(isOriginalGuild ? '⚠️ Membre averti' : '⚠️ Member warned')
+                        .setDescription(isOriginalGuild 
+                            ? `**${targetUser.username}** a été averti.\n**Raison :** ${reason}\n**Total des warns :** ${totalWarns}`
+                            : `**${targetUser.username}** has been warned.\n**Reason:** ${reason}\n**Total warnings:** ${totalWarns}`
+                        )
+                        .setTimestamp()
+                ]
+            });
+
+            await sendModLog(interaction.guild, 'WARN', targetUser, interaction.user, reason, [
+                { name: '📊 Total Warns', value: String(totalWarns), inline: true }
+            ], '#F1C40F');
+            return;
+        }
+
+        // 10. WARNINGS COMMAND
+        if (commandName === 'warnings') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const targetUser = interaction.options.getUser('user');
+            const targetId = targetUser.id;
+
+            const userWarns = warningsDb[guildId]?.[targetId] || [];
+
+            if (userWarns.length === 0) {
+                return interaction.reply({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor('#2ECC71')
+                            .setTitle(isOriginalGuild ? `📋 Avertissements de ${targetUser.username}` : `📋 Warnings of ${targetUser.username}`)
+                            .setDescription(isOriginalGuild ? '✅ Aucun avertissement trouvé pour cet utilisateur.' : '✅ No warnings found for this user.')
+                            .setTimestamp()
+                    ]
+                });
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor('#F1C40F')
+                .setTitle(isOriginalGuild ? `📋 Avertissements de ${targetUser.username} (${userWarns.length})` : `📋 Warnings of ${targetUser.username} (${userWarns.length})`)
+                .setTimestamp();
+
+            const fields = userWarns.map((w, idx) => {
+                const dateStr = `<t:${Math.floor(w.timestamp / 1000)}:F>`;
+                return {
+                    name: `Warn #${idx + 1}`,
+                    value: isOriginalGuild
+                        ? `📅 **Date :** ${dateStr}\n🛡️ **Modérateur :** <@${w.warnerId}>\n📝 **Raison :** ${w.reason}`
+                        : `📅 **Date:** ${dateStr}\n🛡️ **Moderator:** <@${w.warnerId}>\n📝 **Reason:** ${w.reason}`
+                };
+            });
+
+            embed.addFields(fields);
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // 11. CLEARWARNS COMMAND
+        if (commandName === 'clearwarns') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const targetUser = interaction.options.getUser('user');
+            const targetId = targetUser.id;
+
+            const userWarns = warningsDb[guildId]?.[targetId] || [];
+            if (userWarns.length === 0) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Cet utilisateur n\'a aucun avertissement.' : '❌ This user has no warnings.',
+                    ephemeral: true
+                });
+            }
+
+            delete warningsDb[guildId][targetId];
+            saveWarnings();
+
+            await interaction.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor('#2ECC71')
+                        .setTitle(isOriginalGuild ? '🧹 Avertissements effacés' : '🧹 Warnings cleared')
+                        .setDescription(isOriginalGuild 
+                            ? `Tous les avertissements de **${targetUser.username}** ont été effacés.`
+                            : `All warnings for **${targetUser.username}** have been cleared.`
+                        )
+                        .setTimestamp()
+                ]
+            });
+
+            await sendModLog(interaction.guild, 'CLEAR WARNS', targetUser, interaction.user, 'Avertissements effacés par le modérateur / Warnings cleared by moderator', [
+                { name: '🧹 Nombre de warns supprimés / Cleared count', value: String(userWarns.length), inline: true }
+            ], '#2ECC71');
+            return;
+        }
+
+        // 12. LOCK COMMAND
+        if (commandName === 'lock') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const channel = interaction.options.getChannel('channel') || interaction.channel;
+            const reason = interaction.options.getString('reason') || 'Aucune raison fournie / No reason provided';
+
+            if (channel.type !== ChannelType.GuildText) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Tu ne peux verrouiller que des salons textuels.' : '❌ You can only lock text channels.',
+                    ephemeral: true
+                });
+            }
+
+            try {
+                // Verrouiller pour @everyone
+                await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+                    SendMessages: false
+                });
+
+                // Verrouiller pour le rôle vérifié si présent
+                const roleName = isOriginalGuild ? 'Verified' : '🎵 Adominated';
+                const verifiedRole = interaction.guild.roles.cache.find(
+                    r => r.name.includes(roleName) || r.name.includes('Verified')
+                );
+                if (verifiedRole) {
+                    await channel.permissionOverwrites.edit(verifiedRole, {
+                        SendMessages: false
+                    });
+                }
+
+                await interaction.reply({
+                    content: isOriginalGuild ? `✅ Salon ${channel} verrouillé avec succès.` : `✅ Channel ${channel} successfully locked.`,
+                    ephemeral: true
+                });
+
+                const lockEmbed = new EmbedBuilder()
+                    .setColor('#E74C3C')
+                    .setTitle(isOriginalGuild ? '🔒 Salon verrouillé' : '🔒 Channel locked')
+                    .setDescription(isOriginalGuild
+                        ? `Ce salon a été verrouillé par un membre du staff.\n**Raison :** ${reason}`
+                        : `This channel has been locked by a staff member.\n**Reason:** ${reason}`
+                    )
+                    .setTimestamp();
+                
+                await channel.send({ embeds: [lockEmbed] });
+
+                await sendModLog(interaction.guild, 'LOCK', channel, interaction.user, reason, [], '#E74C3C');
+            } catch (err) {
+                console.error(err);
+                return interaction.reply({
+                    content: `❌ Erreur : ${err.message}`,
+                    ephemeral: true
+                });
+            }
+            return;
+        }
+
+        // 13. UNLOCK COMMAND
+        if (commandName === 'unlock') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            const channel = interaction.options.getChannel('channel') || interaction.channel;
+            const reason = interaction.options.getString('reason') || 'Aucune raison fournie / No reason provided';
+
+            if (channel.type !== ChannelType.GuildText) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Tu ne peux déverrouiller que des salons textuels.' : '❌ You can only unlock text channels.',
+                    ephemeral: true
+                });
+            }
+
+            try {
+                // Déverrouiller pour @everyone (remettre à neutral/null pour hériter)
+                await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+                    SendMessages: null
+                });
+
+                // Déverrouiller pour le rôle vérifié si présent (remettre à neutral/null)
+                const roleName = isOriginalGuild ? 'Verified' : '🎵 Adominated';
+                const verifiedRole = interaction.guild.roles.cache.find(
+                    r => r.name.includes(roleName) || r.name.includes('Verified')
+                );
+                if (verifiedRole) {
+                    await channel.permissionOverwrites.edit(verifiedRole, {
+                        SendMessages: null
+                    });
+                }
+
+                await interaction.reply({
+                    content: isOriginalGuild ? `✅ Salon ${channel} déverrouillé avec succès.` : `✅ Channel ${channel} successfully unlocked.`,
+                    ephemeral: true
+                });
+
+                const unlockEmbed = new EmbedBuilder()
+                    .setColor('#2ECC71')
+                    .setTitle(isOriginalGuild ? '🔓 Salon déverrouillé' : '🔓 Channel unlocked')
+                    .setDescription(isOriginalGuild
+                        ? `Ce salon a été déverrouillé.\n**Raison :** ${reason}`
+                        : `This channel has been unlocked.\n**Reason:** ${reason}`
+                    )
+                    .setTimestamp();
+                
+                await channel.send({ embeds: [unlockEmbed] });
+
+                await sendModLog(interaction.guild, 'UNLOCK', channel, interaction.user, reason, [], '#2ECC71');
+            } catch (err) {
+                console.error(err);
+                return interaction.reply({
+                    content: `❌ Erreur : ${err.message}`,
+                    ephemeral: true
+                });
+            }
             return;
         }
     }
