@@ -126,6 +126,16 @@ client.once('ready', async () => {
 
     // Enregistrer les Slash Commands
     await registerSlashCommands();
+
+    // Initial UTD updates and interval (every 6 hours)
+    try {
+        await runUTDUpdates();
+    } catch (e) {
+        console.error('Error during initial UTD update:', e.message);
+    }
+    setInterval(() => {
+        runUTDUpdates().catch(e => console.error('Error in scheduled UTD update:', e.message));
+    }, 6 * 60 * 60 * 1000);
 });
 
 async function registerSlashCommands() {
@@ -353,6 +363,10 @@ async function registerSlashCommands() {
                         required: false
                     }
                 ]
+            },
+            {
+                name: 'refresh-utd',
+                description: 'Force a refresh of the UTD codes and tier list channels / Force une mise à jour des salons UTD'
             }
         ];
 
@@ -1212,6 +1226,31 @@ client.on('interactionCreate', async (interaction) => {
             }
             return;
         }
+
+        // 14. REFRESH-UTD COMMAND
+        if (commandName === 'refresh-utd') {
+            if (!isStaff) {
+                return interaction.reply({
+                    content: isOriginalGuild ? '❌ Permissions insuffisantes.' : '❌ Insufficient permissions.',
+                    ephemeral: true
+                });
+            }
+
+            await interaction.deferReply({ ephemeral: true });
+            try {
+                await updateUTDData(interaction.guild);
+                return interaction.editReply({
+                    content: isOriginalGuild 
+                        ? '✅ Les salons de codes et tier lists UTD ont été mis à jour avec succès !'
+                        : '✅ UTD codes and tier list channels have been successfully updated!'
+                });
+            } catch (err) {
+                console.error(err);
+                return interaction.editReply({
+                    content: `❌ Error: ${err.message}`
+                });
+            }
+        }
     }
 
     if (!interaction.isButton()) return;
@@ -1862,6 +1901,222 @@ function resumeActiveGiveaways() {
 // ═══════════════════════════════════════
 // CONNEXION
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+// 🎮 UTD SCRAPING AND AUTO-PUBLISHING
+// ═══════════════════════════════════════
+const { scrapeAll } = require('./utdxScraper');
+
+async function updateUTDData(guild) {
+    console.log(`[UTD] Starting update for guild: ${guild.name} (${guild.id})`);
+    
+    // Fetch data
+    const data = await scrapeAll();
+    
+    // 1. Update Codes channel
+    const codesChannel = guild.channels.cache.get('1507038695201574973') || 
+                         guild.channels.cache.find(c => c.name.includes('codes') && c.type === ChannelType.GuildText);
+                         
+    if (codesChannel) {
+        console.log(`[UTD] Updating codes channel: #${codesChannel.name}`);
+        try {
+            const fetched = await codesChannel.messages.fetch({ limit: 100 });
+            if (fetched.size > 0) {
+                await codesChannel.bulkDelete(fetched).catch(async () => {
+                    for (const msg of fetched.values()) {
+                        await msg.delete().catch(() => {});
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('[UTD] Error clearing codes channel:', e.message);
+        }
+        
+        const embed = new EmbedBuilder()
+            .setColor('#F1C40F')
+            .setTitle('🔑 Universal Tower Defense X - Active Codes')
+            .setDescription(
+                'Here are the current active codes for Universal Tower Defense X (UTDX). Use them in-game to claim rewards!\n\n' +
+                '🎮 **How to Redeem:**\n' +
+                '1. Open **Universal Tower Defense** on Roblox.\n' +
+                '2. Click on the **Codes** button (usually on the side of the screen).\n' +
+                '3. Copy and paste an active code from below and click redeem!\n\n' +
+                '📜 **Active Codes:**\n' +
+                (data.codes.length > 0 
+                  ? data.codes.map(c => `• \`${c.code}\` - ${c.reward}`).join('\n')
+                  : '*No active codes found at the moment!*')
+            )
+            .setFooter({ text: 'Auto-updated from Beebom • Universal Tower Defense X' })
+            .setTimestamp();
+            
+        await codesChannel.send({ embeds: [embed] });
+        console.log('[UTD] Codes channel updated successfully.');
+    } else {
+        console.log('[UTD] Codes channel not found.');
+    }
+    
+    // 2. Update Tier Lists channel
+    const tierChannel = guild.channels.cache.get('1507038692106178600') || 
+                        guild.channels.cache.find(c => c.name.includes('tier-lists') && c.type === ChannelType.GuildText);
+                        
+    if (tierChannel) {
+        console.log(`[UTD] Updating tier lists channel: #${tierChannel.name}`);
+        try {
+            const fetched = await tierChannel.messages.fetch({ limit: 100 });
+            if (fetched.size > 0) {
+                await tierChannel.bulkDelete(fetched).catch(async () => {
+                    for (const msg of fetched.values()) {
+                        await msg.delete().catch(() => {});
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('[UTD] Error clearing tier lists channel:', e.message);
+        }
+        
+        const groups = [
+            {
+                title: '⚔️ UTDX Combat Tier List - Synchro & Air/Hybrid',
+                color: '#E74C3C',
+                sections: [
+                    'Synchro Units - Massive DPS',
+                    'S-Tier Air/Hybrid',
+                    'A-Tier Air/Hybrid',
+                    'B-Tier Air/Hybrid',
+                    'C-Tier Air/Hybrid',
+                    'D-Tier Air/Hybrid'
+                ],
+                description: 'These are the best units for combating air, boss, and hybrid threats. Synchro units represent the absolute pinnacle of DPS when combined.'
+            },
+            {
+                title: '🪨 UTDX Combat Tier List - Ground',
+                color: '#2ECC71',
+                sections: [
+                    'S-Tier Ground',
+                    'A-Tier Ground',
+                    'B-Tier Ground',
+                    'C-Tier Ground',
+                    'D-Tier Ground'
+                ],
+                description: 'These ground-based units are optimal for dealing massive damage, Bleed/DoT, and clearing lanes of ground enemies.'
+            },
+            {
+                title: '🛡️ UTDX Support & Utility Tier List',
+                color: '#9B59B6',
+                sections: [
+                    'S-Tier Debuff Support',
+                    'S-Tier Buff Support',
+                    'A-Tier Support',
+                    'B-Tier Support'
+                ],
+                description: 'Support units that provide essential buffs (damage, range, speed) or apply critical debuffs (slow, stun, timestop, freeze) to help your team survive longer runs.'
+            },
+            {
+                title: '💰 UTDX Farm Units Tier List',
+                color: '#F1C40F',
+                sections: [
+                    'Farm Units'
+                ],
+                description: 'Units used to generate money/income during waves. Essential for upgrading your high-cost DPS units.'
+            }
+        ];
+        
+        for (const group of groups) {
+            const embeds = [];
+            let currentEmbed = new EmbedBuilder()
+                .setTitle(group.title)
+                .setDescription(group.description)
+                .setColor(group.color);
+                
+            let embedCharCount = group.title.length + group.description.length;
+            
+            for (const sectionName of group.sections) {
+                const units = data.tiers[sectionName] || [];
+                if (units.length === 0) continue;
+                
+                const fieldBlocks = [];
+                let currentFieldVal = '';
+                for (const unit of units) {
+                    let unitText = `• **${unit.name}**`;
+                    if (unit.rarity) {
+                        unitText += ` (*${unit.rarity}*)`;
+                    }
+                    if (unit.explanation) {
+                        const expLines = unit.explanation.split('\n')
+                            .map(line => line.trim())
+                            .filter(line => line.length > 0)
+                            .map(line => line.startsWith('•') ? `  ${line}` : `  • ${line}`)
+                            .join('\n');
+                        unitText += `\n${expLines}`;
+                    }
+                    unitText += '\n\n';
+                    
+                    if (currentFieldVal.length + unitText.length > 1000) {
+                        fieldBlocks.push(currentFieldVal);
+                        currentFieldVal = unitText;
+                    } else {
+                        currentFieldVal += unitText;
+                    }
+                }
+                if (currentFieldVal) {
+                    fieldBlocks.push(currentFieldVal);
+                }
+                
+                for (let i = 0; i < fieldBlocks.length; i++) {
+                    const fieldTitle = i === 0 ? sectionName : `${sectionName} (Part ${i + 1})`;
+                    const fieldValue = fieldBlocks[i];
+                    
+                    const neededChars = fieldTitle.length + fieldValue.length;
+                    if (embedCharCount + neededChars > 5500 || (currentEmbed.data.fields && currentEmbed.data.fields.length >= 20)) {
+                        embeds.push(currentEmbed);
+                        currentEmbed = new EmbedBuilder()
+                            .setTitle(`${group.title} (Continued)`)
+                            .setColor(group.color);
+                        embedCharCount = group.title.length + 12;
+                    }
+                    
+                    currentEmbed.addFields({ name: fieldTitle, value: fieldValue });
+                    embedCharCount += neededChars;
+                }
+            }
+            
+            if (currentEmbed.data.fields && currentEmbed.data.fields.length > 0) {
+                embeds.push(currentEmbed);
+            }
+            
+            if (embeds.length > 0) {
+                embeds.forEach((emb, index) => {
+                    emb.setFooter({ text: `Auto-updated from Destructoid • Page ${index + 1}/${embeds.length}` })
+                       .setTimestamp();
+                });
+                
+                for (const emb of embeds) {
+                    await tierChannel.send({ embeds: [emb] });
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        }
+        console.log('[UTD] Tier lists channel updated successfully.');
+    } else {
+        console.log('[UTD] Tier lists channel not found.');
+    }
+}
+
+// Trigger UTD update for all UTD guilds
+async function runUTDUpdates() {
+    console.log('[UTD] Triggering UTD updates check...');
+    const targetGuildId = '1507001707622563890';
+    const guild = client.guilds.cache.get(targetGuildId);
+    if (guild) {
+        try {
+            await updateUTDData(guild);
+        } catch (e) {
+            console.error(`[UTD] Error during auto-update for guild ${guild.name}:`, e);
+        }
+    } else {
+        console.log(`[UTD] Target guild ${targetGuildId} not found in client guilds cache.`);
+    }
+}
+
 console.log(`\n🚀 Démarrage du bot...\n`);
 client.login(TOKEN).catch((error) => {
     console.error(`❌ Connexion impossible: ${error.message}`);
