@@ -58,33 +58,34 @@ client.on('guildMemberAdd', async (member) => {
     console.log(`👋 Nouveau membre: ${member.user.username}`);
 
     const welcomeChannel = member.guild.channels.cache.find(
-        c => c.name.includes('bienvenue') && c.type === ChannelType.GuildText
+        c => (c.name.includes('bienvenue') || c.name.includes('welcome')) && c.type === ChannelType.GuildText
     );
-    if (!welcomeChannel) return console.log('   ⚠️ Salon bienvenue non trouvé');
+    if (!welcomeChannel) return console.log('   ⚠️ Salon bienvenue/welcome non trouvé');
 
     const verifyChannel = member.guild.channels.cache.find(
-        c => c.name.includes('vérification') || c.name.includes('verification')
+        c => c.name.includes('vérification') || c.name.includes('verification') || c.name.includes('verify')
     );
 
+    const isOriginalGuild = member.guild.id === '1492264434003873973';
     const embed = new EmbedBuilder()
         .setColor('#2ECC71')
         .setAuthor({
-            name: `${member.user.username} vient d'arriver !`,
+            name: isOriginalGuild ? `${member.user.username} vient d'arriver !` : `${member.user.username} just joined!`,
             iconURL: member.user.displayAvatarURL({ dynamic: true }),
         })
-        .setTitle('👋 Bienvenue !')
+        .setTitle(isOriginalGuild ? '👋 Bienvenue !' : '👋 Welcome!')
         .setDescription(
-            `Hey ${member}, bienvenue sur **${member.guild.name}** ! 🎉\n\n` +
-            `Tu es notre **${member.guild.memberCount}ème** membre !\n\n` +
-            (verifyChannel ? `✅ Vérifie-toi dans ${verifyChannel} pour accéder au serveur.` : '📜 Lis les règles pour commencer !')
+            isOriginalGuild 
+                ? `Hey ${member}, bienvenue sur **${member.guild.name}** ! 🎉\n\nTu es notre **${member.guild.memberCount}ème** membre !\n\n` + (verifyChannel ? `✅ Vérifie-toi dans ${verifyChannel} pour accéder au serveur.` : '📜 Lis les règles pour commencer !')
+                : `Hey ${member}, welcome to **${member.guild.name}**! 🎉\n\nYou are our **#${member.guild.memberCount}** member!\n\n` + (verifyChannel ? `✅ Verify yourself in ${verifyChannel} to access the server.` : '📜 Read the rules to get started!')
         )
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
-        .setFooter({ text: `Membre #${member.guild.memberCount}` })
+        .setFooter({ text: isOriginalGuild ? `Membre #${member.guild.memberCount}` : `Member #${member.guild.memberCount}` })
         .setTimestamp();
 
     try {
         await welcomeChannel.send({ content: `${member}`, embeds: [embed] });
-        console.log(`   ✅ Message de bienvenue envoyé`);
+        console.log(`   ✅ Welcome message sent`);
     } catch (err) {
         console.log(`   ❌ Erreur bienvenue: ${err.message}`);
     }
@@ -99,26 +100,26 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         console.log(`🚀 Nouveau boost de: ${newMember.user.username}`);
 
         const announceChannel = newMember.guild.channels.cache.find(
-            c => (c.name.includes('annonces') || c.name.includes('général')) && c.type === ChannelType.GuildText
+            c => (c.name.includes('annonces') || c.name.includes('announcements') || c.name.includes('général') || c.name.includes('general')) && c.type === ChannelType.GuildText
         );
         if (!announceChannel) return;
 
         const boostLevel = newMember.guild.premiumTier;
         const boostCount = newMember.guild.premiumSubscriptionCount || 0;
         const levelNames = ['Aucun', 'Niveau 1', 'Niveau 2', 'Niveau 3'];
+        const levelNamesEN = ['None', 'Level 1', 'Level 2', 'Level 3'];
 
+        const isOriginalGuild = newMember.guild.id === '1492264434003873973';
         const embed = new EmbedBuilder()
             .setColor('#F47FFF')
-            .setTitle('🚀 NOUVEAU BOOST !')
+            .setTitle(isOriginalGuild ? '🚀 NOUVEAU BOOST !' : '🚀 NEW BOOST!')
             .setDescription(
-                `**${newMember.user.username}** vient de booster le serveur ! 💜✨\n\n` +
-                `Merci pour ton soutien, tu es incroyable ! 🎉\n\n` +
-                `📊 **Stats de boost:**\n` +
-                `> 💎 Boosts totaux: **${boostCount}**\n` +
-                `> 🏆 Niveau: **${levelNames[boostLevel] || boostLevel}**`
+                isOriginalGuild
+                    ? `**${newMember.user.username}** vient de booster le serveur ! 💜✨\n\nMerci pour ton soutien, tu es incroyable ! 🎉\n\n📊 **Stats de boost:**\n> 💎 Boosts totaux: **${boostCount}**\n> 🏆 Niveau: **${levelNames[boostLevel] || boostLevel}**`
+                    : `**${newMember.user.username}** just boosted the server! 💜✨\n\nThank you so much for your support, you are amazing! 🎉\n\n📊 **Boost Stats:**\n> 💎 Total Boosts: **${boostCount}**\n> 🏆 Level: **${levelNamesEN[boostLevel] || boostLevel}**`
             )
             .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true, size: 256 }))
-            .setFooter({ text: '💜 Merci pour le boost !' })
+            .setFooter({ text: isOriginalGuild ? '💜 Merci pour le boost !' : '💜 Thanks for the boost!' })
             .setTimestamp();
 
         try {
@@ -134,15 +135,18 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 // 🎭 MAPPING SELF-ROLES (bouton → nom du rôle)
 // ═══════════════════════════════════════
 const SELF_ROLE_MAP = {
-    'role_gamer':     '🎮 Gamer',
-    'role_weeb':      '📺 Weeb',
-    'role_melomane':  '🎵 Mélomane',
-    'role_streameur': '🎬 Streameur',
-    'role_artiste':   '🎨 Artiste',
-    'role_twitch':    '🔔 Twitch',
-    'role_clown':     '🤡 Clown',
-    'role_toxic':     '🐍 Toxic',
-    'role_afk':       '😴 AFK',
+    'role_gamer':       '🎮 Gamer',
+    'role_weeb':        '📺 Weeb',
+    'role_melomane':    '🎵 Mélomane',
+    'role_streameur':   '🎬 Streameur',
+    'role_artiste':     '🎨 Artiste',
+    'role_twitch':      '🔔 Twitch',
+    'role_clown':       '🤡 Clown',
+    'role_toxic':       '🐍 Toxic',
+    'role_afk':         '😴 AFK',
+    'toggle_utd_ping':  '🔔 UTD Ping',
+    'toggle_ado_ping':  '🔔 Ado Ping',
+    'toggle_gamer':     '🎮 Gamer',
 };
 
 // ═══════════════════════════════════════
@@ -154,14 +158,16 @@ client.on('interactionCreate', async (interaction) => {
     const { customId } = interaction;
 
     // ──── 🎭 SELF-ROLES (toggle) ────
-    if (customId.startsWith('role_')) {
+    if (customId.startsWith('role_') || customId.startsWith('toggle_')) {
         const roleName = SELF_ROLE_MAP[customId];
         if (!roleName) return;
 
         const role = interaction.guild.roles.cache.find(r => r.name === roleName);
+        const isOriginalGuild = interaction.guild.id === '1492264434003873973';
+
         if (!role) {
             return interaction.reply({
-                content: `❌ Rôle **${roleName}** non trouvé.`,
+                content: isOriginalGuild ? `❌ Rôle **${roleName}** non trouvé.` : `❌ Role **${roleName}** not found.`,
                 ephemeral: true,
             });
         }
@@ -171,7 +177,7 @@ client.on('interactionCreate', async (interaction) => {
                 // Retirer le rôle
                 await interaction.member.roles.remove(role);
                 await interaction.reply({
-                    content: `❌ Rôle **${roleName}** retiré !`,
+                    content: isOriginalGuild ? `❌ Rôle **${roleName}** retiré !` : `❌ Role **${roleName}** removed!`,
                     ephemeral: true,
                 });
                 console.log(`🎭 ${interaction.user.username} → -${roleName}`);
@@ -179,7 +185,7 @@ client.on('interactionCreate', async (interaction) => {
                 // Ajouter le rôle
                 await interaction.member.roles.add(role);
                 await interaction.reply({
-                    content: `✅ Rôle **${roleName}** ajouté !`,
+                    content: isOriginalGuild ? `✅ Rôle **${roleName}** ajouté !` : `✅ Role **${roleName}** added!`,
                     ephemeral: true,
                 });
                 console.log(`🎭 ${interaction.user.username} → +${roleName}`);
@@ -187,7 +193,7 @@ client.on('interactionCreate', async (interaction) => {
         } catch (err) {
             console.log(`   ❌ Erreur self-role: ${err.message}`);
             await interaction.reply({
-                content: '❌ Erreur lors du changement de rôle.',
+                content: isOriginalGuild ? '❌ Erreur lors du changement de rôle.' : '❌ Error changing role.',
                 ephemeral: true,
             });
         }
@@ -195,16 +201,18 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ──── ✅ VÉRIFICATION ────
-    if (customId === 'verify') {
+    if (customId === 'verify' || customId === 'verify_adomination') {
         console.log(`✅ Vérification de: ${interaction.user.username}`);
+        const isOriginalGuild = interaction.guild.id === '1492264434003873973';
 
+        const roleName = isOriginalGuild ? 'Verified' : '🎵 Adominated';
         const verifiedRole = interaction.guild.roles.cache.find(
-            r => r.name.includes('Verified')
+            r => r.name.includes(roleName) || r.name.includes('Verified')
         );
 
         if (!verifiedRole) {
             return interaction.reply({
-                content: '❌ Rôle Verified non trouvé. Contacte un admin.',
+                content: isOriginalGuild ? '❌ Rôle Verified non trouvé. Contacte un admin.' : '❌ Verified role not found. Contact an admin.',
                 ephemeral: true,
             });
         }
@@ -212,7 +220,7 @@ client.on('interactionCreate', async (interaction) => {
         // Vérifier si déjà vérifié
         if (interaction.member.roles.cache.has(verifiedRole.id)) {
             return interaction.reply({
-                content: '✅ Tu es déjà vérifié !',
+                content: isOriginalGuild ? '✅ Tu es déjà vérifié !' : '✅ You are already verified!',
                 ephemeral: true,
             });
         }
@@ -220,22 +228,25 @@ client.on('interactionCreate', async (interaction) => {
         try {
             await interaction.member.roles.add(verifiedRole);
             await interaction.reply({
-                content: '✅ **Tu es maintenant vérifié !** Bienvenue sur le serveur ! 🎉\nTu as maintenant accès à tous les salons.',
+                content: isOriginalGuild 
+                    ? '✅ **Tu es maintenant vérifié !** Bienvenue sur le serveur ! 🎉\nTu as maintenant accès à tous les salons.'
+                    : '✅ **You are now verified!** Welcome to the server! 🎉\nYou now have access to all channels.',
                 ephemeral: true,
             });
             console.log(`   ✅ ${interaction.user.username} vérifié`);
         } catch (err) {
             console.log(`   ❌ Erreur vérification: ${err.message}`);
             await interaction.reply({
-                content: '❌ Erreur lors de la vérification. Contacte un admin.',
+                content: isOriginalGuild ? '❌ Erreur lors de la vérification. Contacte un admin.' : '❌ Error during verification. Contact an admin.',
                 ephemeral: true,
             });
         }
     }
 
     // ──── 🎫 OUVRIR UN TICKET ────
-    if (customId === 'create_ticket') {
+    if (customId === 'create_ticket' || customId === 'create_ticket_adomination') {
         console.log(`🎫 Ticket demandé par: ${interaction.user.username}`);
+        const isOriginalGuild = interaction.guild.id === '1492264434003873973';
 
         const ticketCategory = interaction.guild.channels.cache.find(
             c => c.name.toLowerCase().includes('support') && c.type === ChannelType.GuildCategory
@@ -243,7 +254,7 @@ client.on('interactionCreate', async (interaction) => {
 
         if (!ticketCategory) {
             return interaction.reply({
-                content: '❌ Catégorie Support non trouvée. Contacte un admin.',
+                content: isOriginalGuild ? '❌ Catégorie Support non trouvée. Contacte un admin.' : '❌ Support category not found. Contact an admin.',
                 ephemeral: true,
             });
         }
@@ -255,7 +266,9 @@ client.on('interactionCreate', async (interaction) => {
 
         if (existingTicket) {
             return interaction.reply({
-                content: `❌ Tu as déjà un ticket ouvert : ${existingTicket}\nFerme-le avant d'en ouvrir un nouveau.`,
+                content: isOriginalGuild 
+                    ? `❌ Tu as déjà un ticket ouvert : ${existingTicket}\nFerme-le avant d'en ouvrir un nouveau.`
+                    : `❌ You already have an open ticket: ${existingTicket}\nClose it before opening a new one.`,
                 ephemeral: true,
             });
         }
@@ -263,7 +276,7 @@ client.on('interactionCreate', async (interaction) => {
         try {
             // Trouver les rôles staff
             const staffRoles = interaction.guild.roles.cache.filter(
-                r => r.name.includes('King') || r.name.includes('Admin') || r.name.includes('Modo')
+                r => r.name.includes('King') || r.name.includes('Admin') || r.name.includes('Modo') || r.name.includes('Empress') || r.name.includes('Commander')
             );
 
             const permissionOverwrites = [
@@ -301,7 +314,7 @@ client.on('interactionCreate', async (interaction) => {
                 name: `ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
                 type: ChannelType.GuildText,
                 parent: ticketCategory.id,
-                topic: `🎫 Ticket de ${interaction.user.username}`,
+                topic: isOriginalGuild ? `🎫 Ticket de ${interaction.user.username}` : `🎫 Ticket of ${interaction.user.username}`,
                 permissionOverwrites,
             });
 
@@ -309,20 +322,19 @@ client.on('interactionCreate', async (interaction) => {
             const closeRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('close_ticket')
-                    .setLabel('🔒 Fermer le ticket')
+                    .setLabel(isOriginalGuild ? '🔒 Fermer le ticket' : '🔒 Close Ticket')
                     .setStyle(ButtonStyle.Danger)
             );
 
             const ticketEmbed = new EmbedBuilder()
                 .setColor('#3498DB')
-                .setTitle(`🎫 Ticket de ${interaction.user.username}`)
+                .setTitle(isOriginalGuild ? `🎫 Ticket de ${interaction.user.username}` : `🎫 Ticket of ${interaction.user.username}`)
                 .setDescription(
-                    `Salut ${interaction.user} !\n\n` +
-                    `Un membre du **staff** va te répondre sous peu.\n\n` +
-                    `📝 **Décris ton problème** en détail pour qu'on puisse t'aider.\n\n` +
-                    `🔒 Pour fermer ce ticket, clique sur le bouton ci-dessous.`
+                    isOriginalGuild
+                        ? `Salut ${interaction.user} !\n\nUn membre du **staff** va te répondre sous peu.\n\n📝 **Décris ton problème** en détail pour qu'on puisse t'aider.\n\n🔒 Pour fermer ce ticket, clique sur le bouton ci-dessous.`
+                        : `Hello ${interaction.user}!\n\nA member of the **Staff** will assist you shortly.\n\n📝 **Describe your issue** in detail so we can help you.\n\n🔒 To close this ticket, click the button below.`
                 )
-                .setFooter({ text: '🎫 Système de tickets' })
+                .setFooter({ text: isOriginalGuild ? '🎫 Système de tickets' : '🎫 Ticket System' })
                 .setTimestamp();
 
             await ticketChannel.send({
@@ -332,7 +344,7 @@ client.on('interactionCreate', async (interaction) => {
             });
 
             await interaction.reply({
-                content: `✅ **Ticket créé !** → ${ticketChannel}`,
+                content: isOriginalGuild ? `✅ **Ticket créé !** → ${ticketChannel}` : `✅ **Ticket created!** → ${ticketChannel}`,
                 ephemeral: true,
             });
 
@@ -340,7 +352,7 @@ client.on('interactionCreate', async (interaction) => {
         } catch (err) {
             console.log(`   ❌ Erreur ticket: ${err.message}`);
             await interaction.reply({
-                content: '❌ Erreur lors de la création du ticket.',
+                content: isOriginalGuild ? '❌ Erreur lors de la création du ticket.' : '❌ Error creating support ticket.',
                 ephemeral: true,
             });
         }
@@ -351,13 +363,15 @@ client.on('interactionCreate', async (interaction) => {
         if (!interaction.channel.name.startsWith('ticket-')) return;
 
         console.log(`🔒 Fermeture ticket: ${interaction.channel.name}`);
+        const isOriginalGuild = interaction.guild.id === '1492264434003873973';
 
         const embed = new EmbedBuilder()
             .setColor('#E74C3C')
-            .setTitle('🔒 Ticket fermé')
+            .setTitle(isOriginalGuild ? '🔒 Ticket fermé' : '🔒 Ticket Closed')
             .setDescription(
-                `Ticket fermé par **${interaction.user.username}**.\n\n` +
-                `Ce salon sera supprimé dans **5 secondes**...`
+                isOriginalGuild
+                    ? `Ticket fermé par **${interaction.user.username}**.\n\nCe salon sera supprimé dans **5 secondes**...`
+                    : `Ticket closed by **${interaction.user.username}**.\n\nThis channel will be deleted in **5 seconds**...`
             )
             .setTimestamp();
 
