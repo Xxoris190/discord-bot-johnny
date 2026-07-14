@@ -1,0 +1,134 @@
+{
+  "targetGuild": {
+    "id": "1507001707622563890",
+    "expectedName": "AdoGyaru"
+  },
+  "filter": {
+    "threshold": 5,
+    "enabledCategories": [
+      "trailer",
+      "teaser",
+      "new_season",
+      "movie",
+      "new_anime",
+      "release_date",
+      "key_visual"
+    ],
+    "extraIncludeKeywords": [],
+    "extraExcludeKeywords": []
+  },
+  "sources": [
+    {
+      "id": "crunchyroll-fr",
+      "name": "Crunchyroll News FR",
+      "url": "https://cr-news-api-service.prd.crunchyrollsvc.com/v1/fr-FR/rss",
+      "trust": "editorial",
+      "language": "fr",
+      "enabled": false,
+      "role": "fallback",
+      "maxItems": 50
+    },
+    {
+      "id": "livechart",
+      "name": "LiveChart Headlines",
+      "url": "https://www.livechart.me/feeds/headlines",
+      "trust": "aggregator",
+      "language": "en",
+      "enabled": true,
+      "role": "primary",
+      "maxItems": 50
+    },
+    {
+      "id": "myanimelist",
+      "name": "MyAnimeList News",
+      "url": "https://myanimelist.net/rss/news.xml",
+      "trust": "aggregator",
+      "language": "en",
+      "enabled": false,
+      "role": "fallback",
+      "maxItems": 25
+    },
+    {
+      "id": "ann",
+      "name": "Anime News Network",
+      "url": "https://www.animenewsnetwork.com/news/rss.xml?ann-edition=us",
+      "trust": "editorial",
+      "language": "en",
+      "enabled": false,
+      "role": "fallback",
+      "maxItems": 40
+    },
+    {
+      "id": "toei-news",
+      "name": "Toei Animation News",
+      "url": "https://www.toei-animation.com/news/feed/",
+      "trust": "official",
+      "language": "en",
+      "enabled": true,
+      "maxItems": 15
+    },
+    {
+      "id": "pony-canyon-news",
+      "name": "PONY CANYON Anime News",
+      "url": "https://news.ponycanyon.co.jp/category/anime/feed/",
+      "trust": "official",
+      "language": "ja",
+      "enabled": true,
+      "maxItems": 15
+    },
+    {
+      "id": "youtube-aniplex",
+      "name": "YouTube · Aniplex",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC14QT5j2nQI8lKBCGtrrBQA",
+      "trust": "official",
+      "language": "ja",
+      "enabled": true,
+      "maxItems": 15
+    },
+    {
+      "id": "youtube-kadokawa",
+      "name": "YouTube · KADOKAWAanime",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCY5fcqgSrQItPAX_Z5Frmwg",
+      "trust": "official",
+      "language": "ja",
+      "enabled": true,
+      "maxItems": 15
+    },
+    {
+      "id": "youtube-toho",
+      "name": "YouTube · TOHO animation",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC14Yc2Qv92DMuyNRlHvpo2Q",
+      "trust": "official",
+      "language": "ja",
+      "enabled": true,
+      "maxItems": 15
+    },
+    {
+      "id": "youtube-avex",
+      "name": "YouTube · avex pictures",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCKlXiCjg_VI0eZ9kKBeNJgw",
+      "trust": "official",
+      "language": "ja",
+      "enabled": true,
+      "maxItems": 15
+    },
+    {
+      "id": "youtube-nbcuniversal",
+      "name": "YouTube · NBCUniversal Anime/Music",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCeOMz8AiNhsDhEovu5_3ujQ",
+      "trust": "official",
+      "language": "ja",
+      "enabled": true,
+      "maxItems": 15
+    },
+    {
+      "id": "youtube-bandai-namco-filmworks",
+      "name": "YouTube · Bandai Namco Filmworks",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCQ5URCSs1f5Cz9rh-cDGxNQ",
+      "trust": "official",
+      "language": "ja",
+      "enabled": true,
+      "maxItems": 15
+    }
+  ]
+}

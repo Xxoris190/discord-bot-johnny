@@ -12,6 +12,7 @@ const {
     REST,
     Routes,
 } = require('discord.js');
+const { startAnimeNewsService } = require('./animeNews/service');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 if (!TOKEN) {
@@ -111,6 +112,7 @@ client.once('ready', async () => {
     console.log(`   ✅ Système de vérification`);
     console.log(`   🎭 Self-roles par boutons`);
     console.log(`   📺 Notifications Twitch live`);
+    console.log(`   📰 Annonces Anime News (si configurées)`);
     console.log(`   Slash Commands (Commandes d'application)`);
     console.log(`\n📋 En attente d'événements...\n`);
 
@@ -126,6 +128,12 @@ client.once('ready', async () => {
 
     // Enregistrer les Slash Commands
     await registerSlashCommands();
+
+    // Anime News est isolé : une erreur de source ou de configuration
+    // ne doit jamais empêcher les autres fonctions de Johnny de démarrer.
+    startAnimeNewsService(client).catch((error) => {
+        console.error(`[AnimeNews] Service non démarré: ${error.message}`);
+    });
 
     // Initial UTD updates and interval (every 6 hours)
     try {
