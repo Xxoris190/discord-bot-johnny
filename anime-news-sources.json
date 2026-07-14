@@ -1,4 +1,8 @@
 {
+  "targetGuild": {
+    "id": "1507001707622563890",
+    "expectedName": "AdoGyaru"
+  },
   "filter": {
     "threshold": 5,
     "enabledCategories": [

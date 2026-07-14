@@ -61,13 +61,14 @@ function loadAnimeNewsConfig() {
     return {
         sources,
         filter: parsed.filter || {},
+        targetGuild: parsed.targetGuild || {},
         configPath,
     };
 }
 
-function loadSettings() {
+function loadSettings(targetGuild = {}) {
     const enabled = envBoolean('ANIME_NEWS_ENABLED', true);
-    const guildId = process.env.ANIME_NEWS_GUILD_ID;
+    const guildId = process.env.ANIME_NEWS_GUILD_ID || targetGuild.id;
     if (enabled && !guildId) {
         throw new Error(
             'ANIME_NEWS_GUILD_ID manque. Copie l’identifiant du serveur AdoGyaru dans les variables Render.'
@@ -77,7 +78,9 @@ function loadSettings() {
     return {
         enabled,
         guildId: enabled ? validateSnowflake(guildId, 'ANIME_NEWS_GUILD_ID') : null,
-        expectedGuildName: process.env.ANIME_NEWS_EXPECTED_GUILD_NAME || DEFAULT_EXPECTED_GUILD_NAME,
+        expectedGuildName: process.env.ANIME_NEWS_EXPECTED_GUILD_NAME
+            || targetGuild.expectedName
+            || DEFAULT_EXPECTED_GUILD_NAME,
         channelId: process.env.ANIME_NEWS_CHANNEL_ID
             ? validateSnowflake(process.env.ANIME_NEWS_CHANNEL_ID, 'ANIME_NEWS_CHANNEL_ID')
             : null,
@@ -509,13 +512,13 @@ async function pollAnimeNews({ channel, config, settings, state }) {
 async function startAnimeNewsService(client) {
     if (activeController) return activeController;
 
-    const settings = loadSettings();
+    const config = loadAnimeNewsConfig();
+    const settings = loadSettings(config.targetGuild);
     if (!settings.enabled) {
         console.log('[AnimeNews] Service désactivé avec ANIME_NEWS_ENABLED=false.');
         return { started: false, reason: 'disabled' };
     }
 
-    const config = loadAnimeNewsConfig();
     const guild = await resolveTargetGuild(client, settings);
     const { channel, created } = await ensureAnimeNewsChannel(guild, settings);
     const state = AnimeNewsState.load(settings.statePath);

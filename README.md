@@ -25,17 +25,17 @@ Le salon créé est `#anime-news`, placé sous une catégorie contenant `INFORMA
 
 ## Configuration sûre sur AdoGyaru
 
-Active le **Mode développeur** dans Discord, fais un clic droit sur le serveur **AdoGyaru**, puis copie son identifiant. Ajoute ensuite ces variables dans Render :
+Le serveur AdoGyaru est ciblé explicitement dans `anime-news-sources.json` avec l'identifiant confirmé `1507001707622563890`. Les variables Render suivantes peuvent toujours remplacer cette configuration :
 
 ```dotenv
 ANIME_NEWS_ENABLED=true
-ANIME_NEWS_GUILD_ID=IDENTIFIANT_NUMERIQUE_D_ADOGYARU
+ANIME_NEWS_GUILD_ID=1507001707622563890
 ANIME_NEWS_EXPECTED_GUILD_NAME=AdoGyaru
 ANIME_NEWS_POLL_INTERVAL_MS=90000
 ANIME_NEWS_MAX_ITEM_AGE_HOURS=36
 ```
 
-`ANIME_NEWS_GUILD_ID` est obligatoire. Johnny vérifie aussi que le nom du serveur correspond à `AdoGyaru` avant toute création. Il refuse d'agir si l'ID ou le nom ne correspond pas, afin de ne jamais créer le salon sur le mauvais serveur.
+Un identifiant est obligatoire, soit dans le fichier de configuration, soit dans `ANIME_NEWS_GUILD_ID`. Johnny vérifie aussi que le nom du serveur correspond à `AdoGyaru` avant toute création. Il refuse d'agir si l'ID ou le nom ne correspond pas, afin de ne jamais créer le salon sur le mauvais serveur.
 
 Permissions nécessaires au bot :
 

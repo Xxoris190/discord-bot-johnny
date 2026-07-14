@@ -79,6 +79,17 @@ test('accepte un snowflake et permet une désactivation sans ID', () => {
     });
 });
 
+test('utilise la cible de serveur confirmée du fichier de configuration', () => {
+    withAnimeEnv({ ANIME_NEWS_ENABLED: 'true' }, () => {
+        const settings = loadSettings({
+            id: '1507001707622563890',
+            expectedName: 'AdoGyaru',
+        });
+        assert.equal(settings.guildId, '1507001707622563890');
+        assert.equal(settings.expectedGuildName, 'AdoGyaru');
+    });
+});
+
 test('construit un embed borné avec métadonnées de reprise', () => {
     const item = {
         id: 'a'.repeat(64),
