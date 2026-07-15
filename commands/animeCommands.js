@@ -2,7 +2,14 @@
 // personnages et compte à rebours du prochain épisode (Jikan + AniList).
 
 const { EmbedBuilder } = require('discord.js');
-const { anilistNextEpisode, anilistSearchMedia, jikanGet } = require('../lib/animeApi');
+const {
+    anilistAiringSchedule,
+    anilistList,
+    anilistNextEpisode,
+    anilistSearchCharacter,
+    anilistSearchMedia,
+    jikanGet,
+} = require('../lib/animeApi');
 
 const EMBED_COLOR = 0x00A8FC;
 const SYNOPSIS_LIMIT = 450;
@@ -138,18 +145,36 @@ function mediaCardEmbed(media, headerLabel) {
     return embed;
 }
 
-function rankedListEmbed(title, entries) {
+function rankedListEmbed(title, entries, sourceLabel = 'MyAnimeList (Jikan)') {
     const lines = entries.slice(0, LIST_SIZE).map((entry, index) => {
         const score = entry.score ? ` — ⭐ ${entry.score}` : '';
         const episodes = entry.episodes ? ` · ${entry.episodes} ép.` : '';
-        return `**${index + 1}.** [${truncate(entry.title, 60)}](${entry.url})${score}${episodes}`;
+        const airing = entry.airingAt ? ` · ép. ${entry.episode} à <t:${entry.airingAt}:t>` : '';
+        return `**${index + 1}.** [${truncate(entry.title, 60)}](${entry.url})${score}${episodes}${airing}`;
     });
     return new EmbedBuilder()
         .setColor(EMBED_COLOR)
         .setTitle(title)
         .setDescription(lines.join('\n') || 'Aucun résultat.')
-        .setFooter({ text: 'Source : MyAnimeList (Jikan)' })
+        .setFooter({ text: `Source : ${sourceLabel}` })
         .setTimestamp();
+}
+
+const ANILIST_TOP_VARIABLES = {
+    airing: { status: 'RELEASING', sort: ['SCORE_DESC'] },
+    upcoming: { status: 'NOT_YET_RELEASED', sort: ['POPULARITY_DESC'] },
+    publishing: { status: 'RELEASING', sort: ['SCORE_DESC'] },
+    bypopularity: { sort: ['POPULARITY_DESC'] },
+    favorite: { sort: ['FAVOURITES_DESC'] },
+    default: { sort: ['SCORE_DESC'] },
+};
+
+function currentAnimeSeason() {
+    const month = new Date().getUTCMonth() + 1;
+    if (month <= 3) return 'winter';
+    if (month <= 6) return 'spring';
+    if (month <= 9) return 'summer';
+    return 'fall';
 }
 
 function onCooldown(userId) {
@@ -191,39 +216,97 @@ async function runAnimeSearch(interaction) {
 }
 
 async function runSeason(interaction) {
-    const season = interaction.options.getString('saison');
-    const year = interaction.options.getInteger('annee');
-    const apiPath = season && year ? `/seasons/${year}/${season}` : '/seasons/now';
-    const payload = await jikanGet(apiPath, { sfw: true, limit: LIST_SIZE });
-    const label = season && year ? `${season} ${year}` : 'saison en cours';
-    return interaction.editReply({ embeds: [rankedListEmbed(`🗓️ Anime — ${label}`, payload.data || [])] });
+    const season = interaction.options.getString('saison') || currentAnimeSeason();
+    const year = interaction.options.getInteger('annee') || new Date().getUTCFullYear();
+    const label = `${season} ${year}`;
+
+    let entries;
+    let source = 'MyAnimeList (Jikan)';
+    try {
+        const payload = await jikanGet(`/seasons/${year}/${season}`, { sfw: true, limit: LIST_SIZE });
+        entries = payload.data || [];
+    } catch (error) {
+        console.error(`[Commands] Jikan indisponible (${error.message}), bascule sur AniList.`);
+        entries = await anilistList({
+            type: 'ANIME',
+            season: season.toUpperCase(),
+            seasonYear: year,
+            sort: ['POPULARITY_DESC'],
+        });
+        source = 'AniList (secours)';
+    }
+    return interaction.editReply({ embeds: [rankedListEmbed(`🗓️ Anime — ${label}`, entries, source)] });
 }
 
 async function runTop(interaction, type) {
     const filter = interaction.options.getString('categorie');
-    const payload = await jikanGet(`/top/${type}`, { filter: filter || undefined, limit: LIST_SIZE, sfw: true });
     const suffix = filter ? ` (${filter})` : '';
     const emoji = type === 'anime' ? '🏆' : '📚';
-    return interaction.editReply({ embeds: [rankedListEmbed(`${emoji} Top ${type}${suffix}`, payload.data || [])] });
+
+    let entries;
+    let source = 'MyAnimeList (Jikan)';
+    try {
+        const payload = await jikanGet(`/top/${type}`, { filter: filter || undefined, limit: LIST_SIZE, sfw: true });
+        entries = payload.data || [];
+    } catch (error) {
+        console.error(`[Commands] Jikan indisponible (${error.message}), bascule sur AniList.`);
+        const variables = ANILIST_TOP_VARIABLES[filter] || ANILIST_TOP_VARIABLES.default;
+        entries = await anilistList({ ...variables, type: type.toUpperCase() });
+        source = 'AniList (secours)';
+    }
+    return interaction.editReply({ embeds: [rankedListEmbed(`${emoji} Top ${type}${suffix}`, entries, source)] });
 }
 
 async function runSchedule(interaction) {
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const day = interaction.options.getString('jour') || days[new Date().getUTCDay()];
-    const payload = await jikanGet('/schedules', { filter: day, sfw: true, limit: LIST_SIZE });
-    return interaction.editReply({ embeds: [rankedListEmbed(`📅 Diffusions — ${day}`, payload.data || [])] });
+
+    let entries;
+    let source = 'MyAnimeList (Jikan)';
+    try {
+        const payload = await jikanGet('/schedules', { filter: day, sfw: true, limit: LIST_SIZE });
+        entries = payload.data || [];
+    } catch (error) {
+        console.error(`[Commands] Jikan indisponible (${error.message}), bascule sur AniList.`);
+        entries = await anilistAiringSchedule(day);
+        source = 'AniList (secours)';
+    }
+    return interaction.editReply({ embeds: [rankedListEmbed(`📅 Diffusions — ${day}`, entries, source)] });
 }
 
 async function runRandom(interaction) {
-    const payload = await jikanGet(`/random/anime?sfw=true&nocache=${Math.floor(Date.now() / 1000)}`);
-    if (!payload.data) return interaction.editReply('❌ Impossible de tirer un anime au hasard, réessaie.');
-    return interaction.editReply({ embeds: [mediaCardEmbed(payload.data, '🎲 Anime au hasard')] });
+    try {
+        const payload = await jikanGet(`/random/anime?sfw=true&nocache=${Math.floor(Date.now() / 1000)}`);
+        if (payload.data) {
+            return interaction.editReply({ embeds: [mediaCardEmbed(payload.data, '🎲 Anime au hasard')] });
+        }
+    } catch (error) {
+        console.error(`[Commands] Jikan indisponible (${error.message}), bascule sur AniList.`);
+    }
+
+    // Secours : une page au hasard parmi les 1000 anime les plus populaires AniList.
+    const page = 1 + Math.floor(Math.random() * 200);
+    const entries = await anilistList({ type: 'ANIME', sort: ['POPULARITY_DESC'], page, perPage: 5 });
+    const pick = entries[Math.floor(Math.random() * entries.length)];
+    if (!pick) return interaction.editReply('❌ Impossible de tirer un anime au hasard, réessaie.');
+    const media = await anilistSearchMedia(pick.title, 'ANIME');
+    if (!media) return interaction.editReply('❌ Impossible de tirer un anime au hasard, réessaie.');
+    const embed = mediaCardEmbed(media, '🎲 Anime au hasard').setFooter({ text: 'Source : AniList (secours)' });
+    return interaction.editReply({ embeds: [embed] });
 }
 
 async function runCharacter(interaction) {
     const name = interaction.options.getString('nom');
-    const payload = await jikanGet('/characters', { q: name, limit: 3, order_by: 'favorites', sort: 'desc' });
-    const character = (payload.data || [])[0];
+    let character;
+    let source = 'MyAnimeList (Jikan)';
+    try {
+        const payload = await jikanGet('/characters', { q: name, limit: 3, order_by: 'favorites', sort: 'desc' });
+        character = (payload.data || [])[0];
+    } catch (error) {
+        console.error(`[Commands] Jikan indisponible (${error.message}), bascule sur AniList.`);
+        character = await anilistSearchCharacter(name);
+        source = 'AniList (secours)';
+    }
     if (!character) {
         return interaction.editReply(`❌ Aucun personnage trouvé pour **${truncate(name, 80)}**.`);
     }
@@ -235,8 +318,8 @@ async function runCharacter(interaction) {
         .setTitle(truncate(character.name, 256))
         .setURL(character.url)
         .setDescription(truncate(character.about || 'Pas de biographie disponible.', SYNOPSIS_LIMIT))
-        .addFields({ name: 'Favoris MAL', value: `❤️ ${formatCount(character.favorites)}`, inline: true })
-        .setFooter({ text: 'Source : MyAnimeList (Jikan)' });
+        .addFields({ name: 'Favoris', value: `❤️ ${formatCount(character.favorites)}`, inline: true })
+        .setFooter({ text: `Source : ${source}` });
     if (character.name_kanji) embed.addFields({ name: 'Kanji', value: character.name_kanji, inline: true });
     if (image) embed.setThumbnail(image);
     return interaction.editReply({ embeds: [embed] });
