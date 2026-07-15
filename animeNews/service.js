@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
     ChannelType,
     EmbedBuilder,
     OverwriteType,
@@ -278,14 +281,46 @@ function truncate(value, limit) {
     return `${shortened}…`;
 }
 
+// Les descriptions YouTube accumulent liens, hashtags et blocs promo :
+// on ne garde que les premières phrases utiles pour l'embed.
+function cleanSummary(rawSummary, isVideo) {
+    const withoutNoise = String(rawSummary || '')
+        .replace(/https?:\/\/\S+/gi, ' ')
+        .replace(/[#＃][^\s#＃]+/g, ' ')
+        .replace(/[▼■▶►☆★＿_]{2,}/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return truncate(withoutNoise, isVideo ? 300 : 650);
+}
+
+function buildAnimeComponents(item) {
+    const buttons = [];
+    const canonicalMediaUrl = canonicalizeYouTubeUrl(item.mediaUrl);
+    if (canonicalMediaUrl && canonicalMediaUrl !== item.url) {
+        buttons.push(new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel('▶ Regarder la vidéo')
+            .setURL(canonicalMediaUrl));
+    }
+    if (validHttpUrl(item.url)) {
+        const isVideo = Boolean(canonicalizeYouTubeUrl(item.url));
+        buttons.push(new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel(isVideo ? '▶ Voir sur YouTube' : '📰 Lire l’annonce')
+            .setURL(item.url));
+    }
+    if (buttons.length === 0) return [];
+    return [new ActionRowBuilder().addComponents(...buttons)];
+}
+
 function buildAnimeEmbed(item, classification) {
     const timestamp = Date.parse(item.publishedAt);
     const relativeTime = Number.isFinite(timestamp)
         ? `<t:${Math.floor(timestamp / 1000)}:R>`
         : 'date inconnue';
-    const summary = item.summary
-        ? truncate(item.summary, 650)
-        : 'Une nouvelle annonce importante vient d’être détectée.';
+    const isVideo = Boolean(canonicalizeYouTubeUrl(item.url) || canonicalizeYouTubeUrl(item.mediaUrl));
+    const summary = cleanSummary(item.summary, isVideo)
+        || 'Une nouvelle annonce importante vient d’être détectée.';
 
     const footerParts = [
         EMBED_FOOTER_PREFIX,
@@ -392,12 +427,37 @@ function recentEnough(item, maxAgeHours) {
     return timestamp >= oldest && timestamp <= futureTolerance;
 }
 
+function canPingRole(channel, roleId) {
+    if (!roleId) return false;
+    const role = channel.guild.roles.cache.get(roleId);
+    if (!role) return false;
+    if (role.mentionable) return true;
+    // Sans « Mentionner tous les rôles », la mention s'affiche mais ne
+    // notifie personne : autant ne pas l'envoyer du tout.
+    const botMember = channel.guild.members.me;
+    const permissions = botMember && channel.permissionsFor(botMember);
+    return Boolean(permissions && permissions.has(PermissionFlagsBits.MentionEveryone));
+}
+
 async function deliverOutbox(channel, state) {
     let delivered = 0;
+    const pingRoleId = state.getPingRoleId();
+    const roleStillExists = canPingRole(channel, pingRoleId);
+
     for (const entry of state.readyOutbox(MAX_POSTS_PER_CYCLE)) {
         try {
             const embed = buildAnimeEmbed(entry.item, entry.classification);
-            await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+            const components = buildAnimeComponents(entry.item);
+            const payload = {
+                embeds: [embed],
+                components,
+                allowedMentions: { parse: [] },
+            };
+            if (roleStillExists) {
+                payload.content = `<@&${pingRoleId}>`;
+                payload.allowedMentions = { parse: [], roles: [pingRoleId] };
+            }
+            await channel.send(payload);
             state.markDelivered(entry.id);
             state.save();
             delivered++;
@@ -412,7 +472,27 @@ async function deliverOutbox(channel, state) {
     return delivered;
 }
 
-async function pollAnimeNews({ channel, config, settings, state }) {
+function noteSourceHealth(health, source, error) {
+    if (!health) return;
+    const entry = health.get(source.id) || {
+        id: source.id,
+        name: source.name,
+        failCount: 0,
+        lastError: null,
+        lastSuccessAt: null,
+    };
+    if (error) {
+        entry.failCount += 1;
+        entry.lastError = String(error.message || error).slice(0, 200);
+    } else {
+        entry.failCount = 0;
+        entry.lastError = null;
+        entry.lastSuccessAt = new Date().toISOString();
+    }
+    health.set(source.id, entry);
+}
+
+async function pollAnimeNews({ channel, config, settings, state, health }) {
     for (const source of config.sources) {
         if (!state.isSourceInitialized(source.id)) state.ensureSourceStarted(source.id);
     }
@@ -434,9 +514,11 @@ async function pollAnimeNews({ channel, config, settings, state }) {
         const source = config.sources[index];
         if (result.status === 'rejected') {
             failedSources++;
+            noteSourceHealth(health, source, result.reason);
             console.error(`[AnimeNews] Source ${source.name}: ${result.reason.message}`);
             continue;
         }
+        noteSourceHealth(health, source, null);
 
         let feed = result.value;
         if (feed.notModified && !state.isSourceInitialized(source.id)) {
@@ -446,6 +528,7 @@ async function pollAnimeNews({ channel, config, settings, state }) {
                 feed = await fetchAnimeSource(source, {}, { timeoutMs: 15000 });
             } catch (error) {
                 failedSources++;
+                noteSourceHealth(health, source, error);
                 console.error(`[AnimeNews] Réamorçage ${source.name}: ${error.message}`);
                 continue;
             }
@@ -533,6 +616,9 @@ async function startAnimeNewsService(client) {
     let recoveryComplete = false;
     let welcomeSent = !created;
     let activationLogged = false;
+    const sourceHealth = new Map();
+    let lastCycleAt = null;
+    let lastCycleStats = null;
     const runSafely = async () => {
         if (pollInProgress) {
             console.log('[AnimeNews] Cycle précédent encore actif, vérification ignorée.');
@@ -560,7 +646,8 @@ async function startAnimeNewsService(client) {
                 await sendWelcomeMessage(channel, settings.pollIntervalMs);
                 welcomeSent = true;
             }
-            await pollAnimeNews({ channel, config, settings, state });
+            lastCycleStats = await pollAnimeNews({ channel, config, settings, state, health: sourceHealth });
+            lastCycleAt = new Date().toISOString();
         } catch (error) {
             console.error(`[AnimeNews] Cycle interrompu: ${error.stack || error.message}`);
         } finally {
@@ -575,10 +662,30 @@ async function startAnimeNewsService(client) {
         started: true,
         guildId: guild.id,
         channelId: channel.id,
+        state,
         get recoveryPending() {
             return !recoveryComplete;
         },
         runNow: runSafely,
+        getStatus: () => ({
+            guildId: guild.id,
+            channelId: channel.id,
+            channelName: channel.name,
+            pollIntervalMs: settings.pollIntervalMs,
+            lastCycleAt,
+            lastCycleStats,
+            recoveryPending: !recoveryComplete,
+            outboxSize: state.data.outbox.length,
+            publishedCount: state.data.published.length,
+            pingRoleId: state.getPingRoleId(),
+            sources: config.sources.map(source => ({
+                id: source.id,
+                name: source.name,
+                trust: source.trust || 'aggregator',
+                language: source.language || 'en',
+                health: sourceHealth.get(source.id) || null,
+            })),
+        }),
         stop: () => {
             clearInterval(timer);
             if (activeController === controller) activeController = null;
@@ -588,10 +695,18 @@ async function startAnimeNewsService(client) {
     return activeController;
 }
 
+function getAnimeNewsController() {
+    return activeController;
+}
+
 module.exports = {
+    buildAnimeComponents,
     buildAnimeEmbed,
     buildChannelPermissionOverwrites,
+    canPingRole,
+    cleanSummary,
     ensureAnimeNewsChannel,
+    getAnimeNewsController,
     loadAnimeNewsConfig,
     loadSettings,
     pollAnimeNews,

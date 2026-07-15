@@ -163,6 +163,8 @@ test('attend la récupération Discord avant de lire les flux puis réessaie', a
         feedFetches++;
         return new Response(emptyRss, { status: 200 });
     };
+    const sourcesConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'anime-news-sources.json'), 'utf8'));
+    const enabledSourceCount = sourcesConfig.sources.filter(source => source.enabled !== false).length;
 
     try {
         await withAnimeEnvAsync({
@@ -176,12 +178,12 @@ test('attend la récupération Discord avant de lire les flux puis réessaie', a
                 assert.equal(controller.recoveryPending, true);
                 assert.equal(feedFetches, 0);
                 const savedState = JSON.parse(fs.readFileSync(path.join(directory, 'state.json'), 'utf8'));
-                assert.equal(Object.keys(savedState.sourceStartedAt).length, 9);
+                assert.equal(Object.keys(savedState.sourceStartedAt).length, enabledSourceCount);
 
                 historyAvailable = true;
                 await controller.runNow();
                 assert.equal(controller.recoveryPending, false);
-                assert.equal(feedFetches, 9);
+                assert.equal(feedFetches, enabledSourceCount);
             } finally {
                 controller.stop();
             }

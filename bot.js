@@ -13,6 +13,13 @@ const {
     Routes,
 } = require('discord.js');
 const { startAnimeNewsService } = require('./animeNews/service');
+const { animeCommandDefinitions, handleAnimeCommand } = require('./commands/animeCommands');
+const { newsCommandDefinitions, handleNewsCommand } = require('./commands/newsCommands');
+const {
+    handleUtilityCommand,
+    UTILITY_COMMAND_NAMES,
+    utilityCommandDefinitions,
+} = require('./commands/utilityCommands');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 if (!TOKEN) {
@@ -375,7 +382,10 @@ async function registerSlashCommands() {
             {
                 name: 'refresh-utd',
                 description: 'Force a refresh of the UTD codes and tier list channels / Force une mise à jour des salons UTD'
-            }
+            },
+            ...newsCommandDefinitions,
+            ...animeCommandDefinitions,
+            ...utilityCommandDefinitions,
         ];
 
         console.log('🔄 Enregistrement des commandes d\'application (Slash Commands)...');
@@ -545,6 +555,11 @@ client.on('interactionCreate', async (interaction) => {
         const guildId = interaction.guildId;
         const userId = interaction.user.id;
         const isOriginalGuild = guildId === '1492264434003873973';
+
+        // 0. NOUVELLES COMMANDES (news, anime/manga, utilitaires)
+        if (commandName === 'animenews') return handleNewsCommand(interaction);
+        if (commandName === 'anime' || commandName === 'manga') return handleAnimeCommand(interaction);
+        if (UTILITY_COMMAND_NAMES.includes(commandName)) return handleUtilityCommand(interaction);
 
         // 1. RANK COMMAND
         if (commandName === 'rank') {

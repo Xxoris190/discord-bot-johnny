@@ -19,7 +19,26 @@ function initialState() {
         sourceHeaders: {},
         seen: [],
         outbox: [],
+        published: [],
+        pingRoleId: null,
         lastDeliveredAt: null,
+    };
+}
+
+const MAX_PUBLISHED_RECORDS = 300;
+
+function publishedRecord(item, classification, deliveredAt) {
+    const primary = classification && classification.primary ? classification.primary : null;
+    return {
+        title: String(item.title || '').slice(0, 256),
+        url: item.url || null,
+        image: item.image || null,
+        mediaUrl: item.mediaUrl || null,
+        category: primary ? primary.key : (item.dedupeKind || null),
+        categoryLabel: primary ? `${primary.emoji} ${primary.label}` : null,
+        sourceName: item.source && item.source.name ? item.source.name : null,
+        publishedAt: item.publishedAt || deliveredAt,
+        deliveredAt,
     };
 }
 
@@ -119,6 +138,8 @@ function hydrateState(raw) {
             : {},
         seen: Array.isArray(raw.seen) ? raw.seen : [],
         outbox: Array.isArray(raw.outbox) ? raw.outbox : [],
+        published: Array.isArray(raw.published) ? raw.published : [],
+        pingRoleId: raw.pingRoleId || null,
         lastDeliveredAt: raw.lastDeliveredAt || null,
     };
 }
@@ -165,6 +186,49 @@ class AnimeNewsState {
         this.data.seen = this.data.seen
             .filter(record => Date.parse(record.seenAt) >= cutoff)
             .slice(-3000);
+        this.data.published = this.data.published.slice(-MAX_PUBLISHED_RECORDS);
+    }
+
+    recordPublished(item, classification, deliveredAt = new Date().toISOString()) {
+        const record = publishedRecord(item, classification, deliveredAt);
+        if (record.url && this.data.published.some(entry => entry.url === record.url)) return;
+        this.data.published.push(record);
+        if (this.data.published.length > MAX_PUBLISHED_RECORDS) {
+            this.data.published = this.data.published.slice(-MAX_PUBLISHED_RECORDS);
+        }
+    }
+
+    recentPublished(limit = 5) {
+        return [...this.data.published]
+            .sort((left, right) => Date.parse(right.deliveredAt) - Date.parse(left.deliveredAt))
+            .slice(0, Math.max(1, limit));
+    }
+
+    searchPublished(query, limit = 5) {
+        const tokens = titleTokens(query);
+        const queryKey = normalizedTitle(query);
+        if (tokens.length === 0 && !queryKey) return [];
+
+        return [...this.data.published]
+            .map(record => {
+                const recordKey = normalizedTitle(record.title);
+                const containsQuery = queryKey && recordKey.includes(queryKey);
+                const similarity = titleSimilarity(tokens, titleTokens(record.title));
+                return { record, score: containsQuery ? 1 : similarity };
+            })
+            .filter(entry => entry.score >= 0.2)
+            .sort((left, right) => right.score - left.score
+                || Date.parse(right.record.deliveredAt) - Date.parse(left.record.deliveredAt))
+            .slice(0, Math.max(1, limit))
+            .map(entry => entry.record);
+    }
+
+    getPingRoleId() {
+        return this.data.pingRoleId || null;
+    }
+
+    setPingRoleId(roleId) {
+        this.data.pingRoleId = roleId || null;
     }
 
     isSourceInitialized(sourceId) {
@@ -270,6 +334,7 @@ class AnimeNewsState {
             this.markDelivered(pending.id, seenAt);
         } else {
             this.remember(item, seenAt);
+            this.recordPublished(item, null, seenAt);
         }
         if (!this.data.lastDeliveredAt || Date.parse(seenAt) > Date.parse(this.data.lastDeliveredAt)) {
             this.data.lastDeliveredAt = seenAt;
@@ -303,6 +368,7 @@ class AnimeNewsState {
 
         const [entry] = this.data.outbox.splice(index, 1);
         this.data.seen.push(recordFromItem(entry.item, deliveredAt));
+        this.recordPublished(entry.item, entry.classification, deliveredAt);
         this.data.lastDeliveredAt = deliveredAt;
     }
 

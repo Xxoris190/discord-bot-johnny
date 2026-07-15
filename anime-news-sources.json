@@ -9,10 +9,13 @@
       "trailer",
       "teaser",
       "new_season",
+      "final_season",
       "movie",
       "new_anime",
       "release_date",
-      "key_visual"
+      "key_visual",
+      "ova_special",
+      "schedule_change"
     ],
     "extraIncludeKeywords": [],
     "extraExcludeKeywords": []
@@ -129,6 +132,35 @@
       "language": "ja",
       "enabled": true,
       "maxItems": 15
+    },
+    {
+      "id": "youtube-mappa",
+      "name": "YouTube · MAPPA CHANNEL",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCjfAEJZdfbIjVHdo5yODfyQ",
+      "trust": "official",
+      "language": "ja",
+      "enabled": true,
+      "maxItems": 15
+    },
+    {
+      "id": "crunchyroll-en",
+      "name": "Crunchyroll News EN",
+      "url": "https://cr-news-api-service.prd.crunchyrollsvc.com/v1/en-US/rss",
+      "trust": "editorial",
+      "language": "en",
+      "enabled": false,
+      "role": "fallback",
+      "maxItems": 40
+    },
+    {
+      "id": "animeanime-jp",
+      "name": "AnimeAnime.jp",
+      "url": "https://animeanime.jp/rss20/index.rdf",
+      "trust": "editorial",
+      "language": "ja",
+      "enabled": false,
+      "role": "fallback",
+      "maxItems": 30
     }
   ]
 }

@@ -31,12 +31,27 @@ const CATEGORY_RULES = [
         patterns: [
             /\bnew season\b/i,
             /\bseason\s*(?:2|3|4|5|6|7|8|9|ii|iii|iv|two|three|four|five)\b/i,
+            /\b(?:2nd|3rd|4th|5th|6th|second|third|fourth|fifth) season\b/i,
             /\bnouvelle saison\b/i,
             /\bsaison\s*(?:2|3|4|5|6|7|8|9)\b/i,
             /\bsequel\b/i,
+            /\b(?:part|cour)\s*(?:2|3|4|ii|iii|two|three)\b/i,
             /\b续(?:集|篇)\b/i,
             /第[二三四五六七八九\d]+期/i,
             /続編(?:制作)?決定/i,
+            /分割2クール/i,
+        ],
+    },
+    {
+        key: 'final_season',
+        label: 'Saison finale',
+        emoji: '🏁',
+        color: 0xC0392B,
+        patterns: [
+            /\bfinal season\b/i,
+            /\b(?:final|last) (?:cour|part)\b/i,
+            /\bsaison finale\b/i,
+            /(?:最終章|最終期|ファイナルシーズン|完結編)/i,
         ],
     },
     {
@@ -95,6 +110,29 @@ const CATEGORY_RULES = [
             /\b(?:key|main|new|teaser) visual\b/i,
             /\bvisuel (?:clé|cle|principal|inédit|inedit|teaser)\b/i,
             /(?:キー|メイン|ティザー)ビジュアル/i,
+        ],
+    },
+    {
+        key: 'ova_special',
+        label: 'OVA / Épisode spécial',
+        emoji: '💫',
+        color: 0x8E44AD,
+        patterns: [
+            /\b(?:ova|oad|ona)\b/i,
+            /\b(?:tv )?special (?:episode|anime|announced)\b/i,
+            /\bépisode spécial\b/i,
+            /(?:特別編|特別アニメ|スペシャルアニメ)/i,
+        ],
+    },
+    {
+        key: 'schedule_change',
+        label: 'Report / Changement de date',
+        emoji: '⏳',
+        color: 0x95A5A6,
+        patterns: [
+            /\b(?:delay(?:ed|s)?|postponed?|pushed back|on hiatus)\b/i,
+            /\b(?:reporté|repoussé|décalé|ajourné)e?s?\b/i,
+            /(?:延期|放送延期|公開延期)/i,
         ],
     },
 ];
